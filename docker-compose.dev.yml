@@ -1,0 +1,28 @@
+services:
+  # CVE Tracker Application (Development)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cve-tracker-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:./db/dev.db
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - db-data:/app/db
+    restart: unless-stopped
+    networks:
+      - cve-tracker-network
+
+volumes:
+  node_modules:
+  db-data:
+    driver: local
+
+networks:
+  cve-tracker-network:
+    driver: bridge

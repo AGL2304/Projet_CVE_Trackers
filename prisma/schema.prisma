@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more at https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Asset {
+  id                String   @id @default(cuid())
+  name              String
+  type              String
+  ip                String?
+  hostname          String?
+  description       String?
+  criticality       String   @default("medium") // low, medium, high, critical
+  status            String   @default("active") // active, inactive, retired
+  vulnerabilities    Vulnerability[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Vulnerability {
+  id                String   @id @default(cuid())
+  title             String
+  description       String?
+  severity          String   // low, medium, high, critical
+  status            String   @default("open") // open, in_progress, resolved, ignored
+  cvssScore         Float?
+  cveId             String?  @unique
+  assetId           String?
+  asset             Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  discoveredAt      DateTime @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model CVE {
+  id                String   @id @default(cuid())
+  cveId             String   @unique
+  description       String
+  severity          String   // low, medium, high, critical
+  cvssScore         Float?
+  cvssVector        String?
+  publishedDate     DateTime?
+  lastModifiedDate  DateTime?
+  references        String?  // JSON array of reference URLs
+  vulnStatus        String?
+  importedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

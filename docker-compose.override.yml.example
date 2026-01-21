@@ -1,0 +1,33 @@
+# Docker Compose Override File
+# Ce fichier permet de personnaliser la configuration locale sans modifier docker-compose.yml
+# Il n'est pas commité dans le contrôle de version (gitignore)
+
+services:
+  app:
+    # Mapping de ports alternatif si le port 3000 est occupé
+    # ports:
+    #   - "3001:3000"
+
+    # Environnement additionnel
+    environment:
+      # Décommentez pour activer le mode debug
+      # - DEBUG=*
+
+      # Décommentez pour spécifier une URL de base différente
+      # - NEXTAUTH_URL=http://localhost:3000
+
+    # Volumes additionnels
+    volumes:
+      # Montage pour le développement
+      # - .:/app:ro
+      # - node_modules:/app/node_modules
+
+    # Limitation de ressources (optionnel)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 1G
