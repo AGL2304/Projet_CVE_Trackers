@@ -1,0 +1,22 @@
+{
+  "appName": "CVE Tracker",
+  "dashboard": "Dashboard",
+  "cves": "CVEs",
+  "assets": "Assets",
+  "vulnerabilities": "Vulnerabilities",
+  "reports": "Reporting",
+  "settings": "Administration",
+  "search": "Global search",
+  "theme": "Theme",
+  "language": "Language",
+  "shortcuts": "Shortcuts",
+  "myAssignments": "My assignments",
+  "newCves7d": "New CVEs (7d)",
+  "patchedThisMonth": "Patched CVEs this month",
+  "avgCvss": "Average CVSS score",
+  "criticalCves": "Critical CVEs",
+  "totalCves": "Total CVEs",
+  "retry": "Retry",
+  "emptyTitle": "No data",
+  "emptyDescription": "No result matches current filters"
+}

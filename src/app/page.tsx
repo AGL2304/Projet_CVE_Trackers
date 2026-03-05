@@ -1,397 +1,463 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Server, AlertTriangle, Database, TrendingUp, Shield, Activity, CheckCircle2, Clock } from 'lucide-react'
-import { Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, Pie, PieChart, Cell, CartesianGrid, Legend } from 'recharts'
+import * as React from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { scaleLinear } from "d3-scale";
+import { Activity, ArrowUpRight, CheckCircle2, ShieldAlert, Timer } from "lucide-react";
+import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell } from "recharts";
+import { useCVEs, useVulnerabilities } from "@/hooks/queries";
+import { normalizeCve, getCveTimestamp, cveDate, cveRelativeDate } from "@/lib/cve-helpers";
+import { getSeverityColor, severityLabel } from "@/lib/cvss";
+import { useUiPreferencesStore } from "@/store/ui-preferences";
+import { PageHeader } from "@/components/page-header";
+import { SeverityBadge } from "@/components/severity-badge";
+import { EmptyState } from "@/components/states/empty-state";
+import { LoadingGrid } from "@/components/states/loading-grid";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import styles from "@/app/dashboard.module.css";
 
-interface DashboardStats {
-  totalAssets: number
-  totalVulnerabilities: number
-  totalCVEs: number
-  criticalVulnerabilities: number
-  resolvedVulnerabilities: number
-  vulnerabilitiesBySeverity: { name: string; value: number; color: string }[]
-  assetsByCriticality: { name: string; value: number; color: string }[]
-  vulnerabilitiesByStatus: { name: string; value: number; color: string }[]
-}
+const currentAnalyst = "analyste.soc";
 
-const severityColors = {
-  critical: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-}
+export default function DashboardPage() {
+  const locale = useUiPreferencesStore((state) => state.locale);
+  const assignments = useUiPreferencesStore((state) => state.assignments);
+  const upsertAssignment = useUiPreferencesStore((state) => state.upsertAssignment);
 
-const statusColors = {
-  open: '#ef4444',
-  in_progress: '#f97316',
-  resolved: '#22c55e',
-  ignored: '#9ca3af',
-}
+  const {
+    data: cveRows,
+    isLoading: cvesLoading,
+    isError: cvesError,
+    refetch: refetchCves,
+  } = useCVEs();
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const {
+    data: vulnerabilities,
+    isLoading: vulnLoading,
+    isError: vulnError,
+    refetch: refetchVulnerabilities,
+  } = useVulnerabilities();
 
-  useEffect(() => {
-    fetchStats()
-  }, [])
+  const [selectedSeverity, setSelectedSeverity] = React.useState<string>("all");
 
-  async function fetchStats() {
-    try {
-      const response = await fetch('/api/dashboard/stats')
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const cves = React.useMemo(() => (cveRows ?? []).map(normalizeCve), [cveRows]);
 
-  if (loading) {
+  const severityDistribution = React.useMemo(() => {
+    const map = new Map<string, number>([
+      ["critical", 0],
+      ["high", 0],
+      ["medium", 0],
+      ["low", 0],
+      ["none", 0],
+    ]);
+
+    cves.forEach((cve) => {
+      map.set(cve.severity, (map.get(cve.severity) ?? 0) + 1);
+    });
+
+    return Array.from(map.entries()).map(([severity, value]) => ({
+      severity,
+      value,
+      label: severityLabel(severity, locale),
+      color: getSeverityColor(severity),
+    }));
+  }, [cves, locale]);
+
+  const topCritical = React.useMemo(() => {
+    return cves
+      .filter((cve) => (selectedSeverity === "all" ? true : cve.severity === selectedSeverity))
+      .sort((a, b) => (b.cvssScore ?? 0) - (a.cvssScore ?? 0))
+      .slice(0, 10);
+  }, [cves, selectedSeverity]);
+
+  const heatmap = React.useMemo(() => buildHeatmap(cves), [cves]);
+
+  const metrics = React.useMemo(() => {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const critical = cves.filter((cve) => cve.severity === "critical").length;
+    const new7d = cves.filter((cve) => {
+      const published = cve.publishedDate ? new Date(cve.publishedDate) : new Date(cve.importedAt);
+      return published >= sevenDaysAgo;
+    }).length;
+
+    const patchedMonth = (vulnerabilities ?? []).filter((entry) => {
+      if (entry.status !== "resolved") return false;
+      const referenceDate = new Date(entry.resolvedAt ?? entry.updatedAt ?? entry.createdAt);
+      return referenceDate >= firstDayOfMonth;
+    }).length;
+
+    const cvss = cves.filter((cve) => typeof cve.cvssScore === "number").map((cve) => Number(cve.cvssScore));
+    const avgCvss = cvss.length ? cvss.reduce((sum, value) => sum + value, 0) / cvss.length : 0;
+
+    return {
+      total: cves.length,
+      critical,
+      new7d,
+      patchedMonth,
+      avgCvss: avgCvss.toFixed(1),
+    };
+  }, [cves, vulnerabilities]);
+
+  const timeline = React.useMemo(() => {
+    const cveTimeline = cves.slice(0, 18).map((item) => ({
+      id: item.cveId,
+      type: "cve" as const,
+      title: `Mise à jour ${item.cveId}`,
+      when: item.lastModifiedDate ?? item.importedAt,
+      severity: item.severity,
+      details: item.description,
+    }));
+
+    const vulnTimeline = (vulnerabilities ?? []).slice(0, 12).map((item) => ({
+      id: item.id,
+      type: "vulnerability" as const,
+      title: item.status === "resolved" ? `Correction ${item.title}` : `Détection ${item.title}`,
+      when: item.updatedAt,
+      severity: item.severity,
+      details: item.asset?.name ? `Asset: ${item.asset.name}` : item.description ?? "",
+    }));
+
+    return [...cveTimeline, ...vulnTimeline]
+      .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
+      .slice(0, 10);
+  }, [cves, vulnerabilities]);
+
+  const myAssignments = React.useMemo(() => {
+    return Object.values(assignments)
+      .filter((entry) => entry.assignee === currentAnalyst)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 8);
+  }, [assignments]);
+
+  const isLoading = cvesLoading || vulnLoading;
+  const isError = cvesError || vulnError;
+
+  if (isLoading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 rounded w-48" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-32 bg-slate-200 rounded" />
-            ))}
-          </div>
-          <div className="h-96 bg-slate-200 rounded" />
-        </div>
+      <div className="p-6 lg:p-8">
+        <LoadingGrid rows={10} />
       </div>
-    )
+    );
   }
 
-  // Calculate derived metrics
-  const resolutionRate = stats?.totalVulnerabilities && stats.totalVulnerabilities > 0
-    ? Math.round(((stats.resolvedVulnerabilities || 0) / stats.totalVulnerabilities) * 100)
-    : 0
-
-  const criticalVulns = stats?.vulnerabilitiesBySeverity.find(v => v.name === 'Critical')?.value || 0
-  const highVulns = stats?.vulnerabilitiesBySeverity.find(v => v.name === 'High')?.value || 0
-  const openVulns = stats?.vulnerabilitiesByStatus.find(s => s.name === 'Open')?.value || 0
-  const inProgressVulns = stats?.vulnerabilitiesByStatus.find(s => s.name === 'In Progress')?.value || 0
-
-  const criticalAssets = stats?.assetsByCriticality.reduce((sum, a) => sum + (a.name === 'Critical' ? a.value : 0), 0) || 0
-
-  // Calculate average CVSS score (simplified)
-  const totalSeverityScore = stats?.vulnerabilitiesBySeverity.reduce((sum, v) => {
-    const multiplier = v.name === 'Critical' ? 10 : v.name === 'High' ? 7 : v.name === 'Medium' ? 5 : 3
-    return sum + (v.value * multiplier)
-  }, 0) || 0
-
-  const avgCVSS = stats?.totalVulnerabilities && stats.totalVulnerabilities > 0
-    ? (totalSeverityScore / stats.totalVulnerabilities).toFixed(1)
-    : '0.0'
+  if (isError) {
+    return (
+      <div className="p-6 lg:p-8">
+        <EmptyState
+          title="Erreur de chargement"
+          description="Le dashboard n'a pas pu récupérer les données."
+          actionLabel="Relancer"
+          onAction={() => {
+            void refetchCves();
+            void refetchVulnerabilities();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Vue d'ensemble et analyse de la sécurité
-        </p>
-      </div>
+    <div className="space-y-6 p-6 lg:p-8">
+      <PageHeader
+        title="Security Dashboard"
+        description="Visibilité immédiate de l'exposition CVE et de l'activité de remédiation"
+        actions={<Badge variant="secondary">Desktop-first SOC Workspace</Badge>}
+      />
 
-      {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Actifs</CardTitle>
-            <Server className="h-5 w-5 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats?.totalAssets || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Infrastructure suivie</p>
-          </CardContent>
-        </Card>
+      <section id="dashboard-kpis" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <KpiCard title="Total CVEs" value={metrics.total} hint="Inventaire actuel" icon={<Activity className="h-4 w-4" />} />
+        <KpiCard title="CVEs critiques" value={metrics.critical} hint="Priorité P1" icon={<ShieldAlert className="h-4 w-4" />} emphasize />
+        <KpiCard title="Nouvelles CVEs (7j)" value={metrics.new7d} hint="Surface récente" icon={<Timer className="h-4 w-4" />} />
+        <KpiCard title="CVEs patchées (mois)" value={metrics.patchedMonth} hint="SLA remédiation" icon={<CheckCircle2 className="h-4 w-4" />} />
+        <KpiCard title="CVSS moyen" value={metrics.avgCvss} hint="Risque moyen" icon={<ArrowUpRight className="h-4 w-4" />} />
+      </section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Vulnérabilités</CardTitle>
-            <AlertTriangle className="h-5 w-5 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats?.totalVulnerabilities || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total détectées</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">CVEs Suivis</CardTitle>
-            <Database className="h-5 w-5 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats?.totalCVEs || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Base NVD</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Critiques</CardTitle>
-            <Shield className="h-5 w-5 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">{criticalVulns}</div>
-            <p className="text-xs text-muted-foreground mt-1">Vulnérabilités critiques</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Vulnerabilities by Severity Bar Chart */}
-        <Card>
+      <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Card className="card-elevated">
           <CardHeader>
-            <CardTitle>Vulnérabilités par Sévérité</CardTitle>
-            <CardDescription>
-              Distribution des vulnérabilités par niveau de sévérité
-            </CardDescription>
+            <CardTitle>Heatmap temporelle</CardTitle>
+            <CardDescription>Densité CVEs par jour (style contributions)</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stats?.vulnerabilitiesBySeverity || []}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#64748b' }} tickLine={{ stroke: '#94a3b8' }} />
-                <YAxis tick={{ fill: '#64748b' }} tickLine={{ stroke: '#94a3b8' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--background))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
-                  }}
-                  cursor={{ fill: 'hsl(var(--muted))' }}
-                />
-                <Bar dataKey="value" name="Vulnérabilités" radius={[8, 8, 8, 8]}>
-                  {stats?.vulnerabilitiesBySeverity.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <HeatmapGrid cells={heatmap} />
           </CardContent>
         </Card>
 
-        {/* Vulnerabilities by Status Bar Chart */}
-        <Card>
+        <Card className="card-elevated">
           <CardHeader>
-            <CardTitle>État des Vulnérabilités</CardTitle>
-            <CardDescription>
-              Statut actuel des vulnérabilités
-            </CardDescription>
+            <CardTitle>Distribution par sévérité</CardTitle>
+            <CardDescription>Drill-down par segment</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stats?.vulnerabilitiesByStatus || []} layout="horizontal">
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="value" tick={{ fill: '#64748b' }} tickLine={{ stroke: '#94a3b8' }} />
-                <YAxis dataKey="name" type="category" tick={{ fill: '#64748b' }} tickLine={{ stroke: '#94a3b8' }} width={100} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--background))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
-                  }}
-                  cursor={{ fill: 'hsl(var(--muted))' }}
-                />
-                <Bar dataKey="value" name="Nombre" radius={[0, 8, 8, 0]} barSize={30}>
-                  {stats?.vulnerabilitiesByStatus.map((entry, index) => (
-                    <Cell key={`cell-status-${entry.name}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Assets by Criticality Pie Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Actifs par Criticité</CardTitle>
-            <CardDescription>
-              Répartition des actifs selon leur niveau de criticité
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stats?.assetsByCriticality || []}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry) => `${entry.name}: ${entry.value}`}
-                  outerRadius={100}
-                  fill="url(#colors)"
+          <CardContent className="space-y-3">
+            <div className="h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={severityDistribution}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius={65}
+                    outerRadius={102}
+                    paddingAngle={3}
+                    onClick={(entry) => setSelectedSeverity(entry.severity)}
+                    animationDuration={420}
+                  >
+                    {severityDistribution.map((segment) => (
+                      <Cell key={segment.severity} fill={segment.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value, label) => [`${value}`, label]}
+                    contentStyle={{ borderRadius: "0.75rem", border: "1px solid var(--border)" }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={selectedSeverity === "all" ? "default" : "outline"}
+                onClick={() => setSelectedSeverity("all")}
+              >
+                Tout
+              </Button>
+              {severityDistribution.map((segment) => (
+                <Button
+                  key={segment.severity}
+                  size="sm"
+                  variant={selectedSeverity === segment.severity ? "default" : "outline"}
+                  onClick={() => setSelectedSeverity(segment.severity)}
                 >
-                  {stats?.assetsByCriticality.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`url(#color${index})`} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--background))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
-                  }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  iconType="circle"
-                  formatter={(value, entry) => (
-                    <span style={{ color: entry.payload.color }}>
-                      {entry.name}: {value}
-                    </span>
-                  )}
-                />
-                <defs>
-                  {stats?.assetsByCriticality.map((entry, index) => (
-                    <linearGradient key={`gradient-${index}`} id={`color${index}`} x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="5%" stopColor={entry.color} stopOpacity={0.9} />
-                      <stop offset="95%" stopColor={entry.color} stopOpacity={0.4} />
-                    </linearGradient>
-                  ))}
-                </defs>
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Security Score Card */}
-        <Card className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-          <CardHeader>
-            <CardTitle>Score Sécurité</CardTitle>
-            <CardDescription>
-              Évaluation globale de la sécurité
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Resolution Rate */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-muted-foreground">Taux de résolution</div>
-                <div className="text-3xl font-bold text-green-600">
-                  {resolutionRate}%
-                </div>
-              </div>
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
-            </div>
-
-            {/* Progress Bar */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Progression</span>
-                <span className="font-medium">{stats?.resolvedVulnerabilities || 0} / {stats?.totalVulnerabilities || 0}</span>
-              </div>
-              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all"
-                  style={{ width: `${resolutionRate}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">{criticalVulns}</div>
-                <div className="text-xs text-muted-foreground">Critiques</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{inProgressVulns}</div>
-                <div className="text-xs text-muted-foreground">En cours</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Key Metrics Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Métriques Clés</CardTitle>
-          <CardDescription>
-            Indicateurs de performance de sécurité
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* CVSS Score */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-blue-500" />
-                <div className="text-sm text-muted-foreground">Score CVSS Moyen</div>
-              </div>
-              <div className="text-2xl font-bold">
-                {avgCVSS}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Basé sur {stats?.totalVulnerabilities || 0} vulnérabilités
-              </div>
-            </div>
-
-            {/* Assets at Risk */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <div className="text-sm text-muted-foreground">Actifs à Risque</div>
-              </div>
-              <div className="text-2xl font-bold text-red-600">
-                {criticalAssets}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Criticité haute ou critique
-              </div>
-            </div>
-
-            {/* Open Vulnerabilities */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-orange-500" />
-                <div className="text-sm text-muted-foreground">Vulnérabilités Ouvertes</div>
-              </div>
-              <div className="text-2xl font-bold text-orange-600">
-                {openVulns}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                En attente de correction
-              </div>
-            </div>
-          </div>
-
-          {/* Detailed Status Breakdown */}
-          <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div className="text-sm font-medium mb-4">Répartition détaillée par statut</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {stats?.vulnerabilitiesByStatus.map((status) => (
-                <div key={status.name} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: status.color }}
-                    />
-                    <span className="text-sm">{status.name}</span>
-                  </div>
-                  <span className="text-lg font-bold">{status.value}</span>
-                </div>
+                  {segment.label}
+                </Button>
               ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
+        <Card className="card-elevated">
+          <CardHeader>
+            <CardTitle>Top 10 CVEs critiques</CardTitle>
+            <CardDescription>Table condensée avec actions rapides</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topCritical.length === 0 ? (
+              <EmptyState title="Aucun CVE" description="Aucune donnée critique pour cette vue." />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>CVE</TableHead>
+                      <TableHead>Sévérité</TableHead>
+                      <TableHead>CVSS</TableHead>
+                      <TableHead>Publication</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topCritical.map((cve) => (
+                      <TableRow key={cve.id}>
+                        <TableCell className="font-medium">{cve.cveId}</TableCell>
+                        <TableCell>
+                          <SeverityBadge value={cve.severity} />
+                        </TableCell>
+                        <TableCell>{cve.cvssScore?.toFixed(1) ?? "-"}</TableCell>
+                        <TableCell>{cveDate(cve.publishedDate ?? cve.importedAt, locale)}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={`/cves/${cve.cveId}`}>Détail</Link>
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                upsertAssignment({
+                                  cveId: cve.cveId,
+                                  assignee: currentAnalyst,
+                                  status: "todo",
+                                  updatedAt: new Date().toISOString(),
+                                })
+                              }
+                            >
+                              Assigner
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="card-elevated">
+          <CardHeader>
+            <CardTitle>Mes assignations</CardTitle>
+            <CardDescription>CVEs assignées à {currentAnalyst}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {myAssignments.length === 0 ? (
+              <EmptyState title="Rien assigné" description="Assignez une CVE depuis le top 10 ou la liste CVE." />
+            ) : (
+              <div className="space-y-2">
+                {myAssignments.map((item) => (
+                  <div key={item.cveId} className="rounded-lg border bg-card px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <Link href={`/cves/${item.cveId}`} className="font-medium hover:underline">
+                        {item.cveId}
+                      </Link>
+                      <Badge variant={item.status === "done" ? "secondary" : "outline"}>{item.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Mis à jour {cveRelativeDate(item.updatedAt, locale)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card className="card-elevated">
+          <CardHeader>
+            <CardTitle>Timeline d'activité</CardTitle>
+            <CardDescription>Dernières modifications et nouvelles CVEs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {timeline.map((entry, index) => (
+                <motion.div
+                  key={`${entry.type}-${entry.id}`}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  className={`rounded-lg border bg-card px-3 py-2 ${styles.timelineCard}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <SeverityBadge value={entry.severity} />
+                      <span className="text-sm font-medium">{entry.title}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{cveRelativeDate(entry.when, locale)}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{entry.details}</p>
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
     </div>
-  )
+  );
+}
+
+function KpiCard({
+  title,
+  value,
+  hint,
+  icon,
+  emphasize = false,
+}: {
+  title: string;
+  value: string | number;
+  hint: string;
+  icon: React.ReactNode;
+  emphasize?: boolean;
+}) {
+  return (
+    <Card className={emphasize ? "card-glow" : "card-elevated"}>
+      <CardHeader className="pb-3">
+        <CardDescription className="flex items-center justify-between text-xs uppercase tracking-wide">
+          {title}
+          {icon}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p
+          className="text-3xl font-semibold"
+          style={emphasize ? { color: "var(--severity-critical)" } : undefined}
+        >
+          {value}
+        </p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function buildHeatmap(cves: Array<ReturnType<typeof normalizeCve>>) {
+  const days = 84;
+  const today = new Date();
+  const buckets = Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (days - index - 1));
+    date.setHours(0, 0, 0, 0);
+
+    const value = cves.filter((item) => {
+      const timestamp = getCveTimestamp(item);
+      const target = new Date(timestamp);
+      target.setHours(0, 0, 0, 0);
+      return target.getTime() === date.getTime();
+    }).length;
+
+    return {
+      date,
+      value,
+      label: date.toISOString().slice(0, 10),
+    };
+  });
+
+  return buckets;
+}
+
+function HeatmapGrid({
+  cells,
+}: {
+  cells: Array<{
+    date: Date;
+    value: number;
+    label: string;
+  }>;
+}) {
+  const max = Math.max(...cells.map((cell) => cell.value), 1);
+  const colorScale = scaleLinear<string>()
+    .domain([0, Math.max(1, Math.floor(max * 0.2)), max])
+    .range(["#cbd5e1", "#38bdf8", "#0f172a"]);
+
+  const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, index) =>
+    cells.slice(index * 7, index * 7 + 7)
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-flex gap-1">
+        {weeks.map((week, weekIndex) => (
+          <div key={weekIndex} className="grid grid-rows-7 gap-1">
+            {week.map((cell) => (
+              <div
+                key={cell.label}
+                className={`h-3 w-3 ${styles.heatmapCell}`}
+                style={{ backgroundColor: colorScale(cell.value) }}
+                title={`${cell.label}: ${cell.value}`}
+                aria-label={`${cell.label}: ${cell.value}`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

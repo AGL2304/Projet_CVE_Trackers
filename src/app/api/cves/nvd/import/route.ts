@@ -1,5 +1,8 @@
+import { CVEStatus, CveSource, Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { calculateSeverityFromCvss } from '@/lib/v2/severity'
+import { mapCveToLegacy } from '@/lib/v2/mappers'
 
 interface NVDCVE {
   cve: {
@@ -21,22 +24,10 @@ interface NVDCVE {
   }
 }
 
-function mapNVDSeverity(severity: string): string {
-  const normalizedSeverity = severity?.toLowerCase() || 'unknown'
-
-  if (normalizedSeverity === 'critical') return 'critical'
-  if (normalizedSeverity === 'high') return 'high'
-  if (normalizedSeverity === 'medium') return 'medium'
-  if (normalizedSeverity === 'low') return 'low'
-
-  return 'medium' // Default fallback
-}
-
 export async function POST(request: NextRequest) {
   try {
     const nvdCVE: NVDCVE = await request.json()
 
-    // Extract data from NVD format
     const cveId = nvdCVE.cve.id
     const description =
       nvdCVE.cve.descriptions.find((d) => d.lang === 'en')?.value ||
@@ -44,61 +35,58 @@ export async function POST(request: NextRequest) {
       'No description available'
 
     const cvssMetric = nvdCVE.cve.metrics?.cvssMetricV31?.[0]
-    const cvssScore = cvssMetric?.cvssData.baseScore
-    const cvssVector = cvssMetric?.cvssData.vectorString
-    const rawSeverity = cvssMetric?.cvssData.baseSeverity
+    const cvssV3Score = cvssMetric?.cvssData.baseScore
+    const cvssV3Vector = cvssMetric?.cvssData.vectorString
+    const severity = calculateSeverityFromCvss(cvssV3Score, null)
 
-    const severity = mapNVDSeverity(rawSeverity || 'medium')
-
-    const publishedDate = nvdCVE.cve.published
-    const lastModifiedDate = nvdCVE.cve.lastModified
+    const publishedAt = nvdCVE.cve.published ? new Date(nvdCVE.cve.published) : null
+    const modifiedAt = nvdCVE.cve.lastModified ? new Date(nvdCVE.cve.lastModified) : null
     const vulnStatus = nvdCVE.cve.vulnStatus
-
-    // Extract references as JSON array
     const references = nvdCVE.cve.references?.map((ref) => ref.url) || []
 
-    // Check if CVE already exists
-    const existingCVE = await db.cVE.findUnique({
+    const upserted = await db.cVE.upsert({
       where: { cveId },
-    })
-
-    if (existingCVE) {
-      // Update existing CVE
-      const updatedCVE = await db.cVE.update({
-        where: { cveId },
-        data: {
-          description,
-          severity,
-          cvssScore,
-          cvssVector,
-          publishedDate: publishedDate ? new Date(publishedDate) : null,
-          lastModifiedDate: lastModifiedDate ? new Date(lastModifiedDate) : null,
-          references: JSON.stringify(references),
-          vulnStatus,
-          updatedAt: new Date(),
-        },
-      })
-
-      return NextResponse.json(updatedCVE)
-    }
-
-    // Create new CVE
-    const newCVE = await db.cVE.create({
-      data: {
-        cveId,
+      update: {
+        title: cveId,
         description,
+        publishedAt,
+        modifiedAt,
+        cvssV3Score,
+        cvssV3Vector,
+        status: CVEStatus.ANALYZING,
         severity,
-        cvssScore,
-        cvssVector,
-        publishedDate: publishedDate ? new Date(publishedDate) : null,
-        lastModifiedDate: lastModifiedDate ? new Date(lastModifiedDate) : null,
+        source: CveSource.NVD,
+        rawData: nvdCVE as unknown as Prisma.InputJsonValue,
         references: JSON.stringify(references),
         vulnStatus,
-        importedAt: new Date(),
+        cvssScore: cvssV3Score,
+        cvssVector: cvssV3Vector,
+        publishedDate: publishedAt,
+        lastModifiedDate: modifiedAt,
+        version: { increment: 1 },
+      },
+      create: {
+        cveId,
+        title: cveId,
+        description,
+        publishedAt,
+        modifiedAt,
+        cvssV3Score,
+        cvssV3Vector,
+        status: CVEStatus.NEW,
+        severity,
+        source: CveSource.NVD,
+        rawData: nvdCVE as unknown as Prisma.InputJsonValue,
+        references: JSON.stringify(references),
+        vulnStatus,
+        cvssScore: cvssV3Score,
+        cvssVector: cvssV3Vector,
+        publishedDate: publishedAt,
+        lastModifiedDate: modifiedAt,
       },
     })
 
-    return NextResponse.json(newCVE, { status: 201 })
+    return NextResponse.json(mapCveToLegacy(upserted), { status: 201 })
   } catch (error) {
     console.error('Error importing CVE:', error)
     return NextResponse.json(

@@ -1,0 +1,22 @@
+.heatmapCell {
+  border-radius: 3px;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.heatmapCell:hover {
+  filter: brightness(1.08);
+  transform: scale(1.12);
+}
+
+.timelineCard {
+  position: relative;
+  overflow: hidden;
+}
+
+.timelineCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--severity-critical), var(--primary));
+}

@@ -1,5 +1,4 @@
 services:
-  # CVE Tracker Application (Development)
   app:
     build:
       context: .
@@ -9,19 +8,94 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=file:./db/dev.db
+      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:6432/cve_tracker?schema=public
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-      - db-data:/app/db
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - cve-tracker-network
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=cve_tracker
+      - POSTGRES_USER=cve_tracker
+      - POSTGRES_PASSWORD=cve_tracker
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cve_tracker -d cve_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cve-tracker-network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DB_USER=cve_tracker
+      - DB_PASSWORD=cve_tracker
+      - DB_HOST=postgres
+      - DB_NAME=cve_tracker
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=200
+      - DEFAULT_POOL_SIZE=20
+      - AUTH_TYPE=scram-sha-256
+    ports:
+      - "6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cve-tracker-network
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data-dev:/data
+    networks:
+      - cve-tracker-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elastic-data-dev:/usr/share/elasticsearch/data
     networks:
       - cve-tracker-network
 
 volumes:
   node_modules:
-  db-data:
-    driver: local
+  postgres-data-dev:
+  redis-data-dev:
+  elastic-data-dev:
 
 networks:
   cve-tracker-network:

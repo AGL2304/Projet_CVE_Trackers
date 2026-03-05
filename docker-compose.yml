@@ -1,59 +1,186 @@
-
 services:
-  # CVE Tracker Application
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: cve-tracker-gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - edge
+      - backend
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: cve-tracker-app
-    ports:
-      - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:./db/dev.db
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-    volumes:
-      - db-data:/app/db
-      - logs:/app/logs
+      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:6432/cve_tracker?schema=public
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     depends_on:
-      - db
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    expose:
+      - "3000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 8s
+      retries: 5
+      start_period: 35s
+    networks:
+      - backend
 
-  # PostgreSQL Database with Initial Data
-  db:
-    image: postgres:15-alpine
-    container_name: cve-tracker-db
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cve-tracker-worker
+    command: ["node", "scripts/worker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:6432/cve_tracker?schema=public
+      - REDIS_URL=redis://redis:6379
+      - WORKER_POLL_INTERVAL_MS=15000
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cve-tracker-postgres
     environment:
       - POSTGRES_DB=cve_tracker
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_HOST_AUTH_METHOD=trust
-    ports:
-      - "5432:5432"
+      - POSTGRES_USER=cve_tracker
+      - POSTGRES_PASSWORD=cve_tracker
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./db/initial_data.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
+      test: ["CMD-SHELL", "pg_isready -U cve_tracker -d cve_tracker"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    container_name: cve-tracker-pgbouncer
+    environment:
+      - DB_USER=cve_tracker
+      - DB_PASSWORD=cve_tracker
+      - DB_HOST=postgres
+      - DB_NAME=cve_tracker
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=500
+      - DEFAULT_POOL_SIZE=40
+      - AUTH_TYPE=md5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "6432"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: cve-tracker-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.2
+    container_name: cve-tracker-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - elastic-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: cve-tracker-prometheus
+    profiles: ["monitoring"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: cve-tracker-grafana
+    profiles: ["monitoring"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend
 
 volumes:
-  db-data:
-    driver: local
   postgres-data:
-    driver: local
+  redis-data:
+  elastic-data:
+  prometheus-data:
+  grafana-data:
 
 networks:
-  default:
+  edge:
+    driver: bridge
+  backend:
     driver: bridge

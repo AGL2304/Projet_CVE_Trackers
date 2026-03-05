@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { mapCveToLegacy } from '@/lib/v2/mappers'
 
 // GET all CVEs
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json(cves)
+    return NextResponse.json(cves.map(mapCveToLegacy))
   } catch (error) {
     console.error('Error fetching CVEs:', error)
     return NextResponse.json(

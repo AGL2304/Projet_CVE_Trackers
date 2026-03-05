@@ -29,18 +29,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Create necessary directories
-RUN mkdir -p /app/db /app/logs
+RUN mkdir -p /app/logs /app/uploads
 
 # Setup user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Setup database directory
-RUN chown nextjs:nodejs db
-RUN touch db/dev.db
-RUN chown nextjs:nodejs db/dev.db
 
 # Setup log directory
 RUN chown nextjs:nodejs logs
@@ -51,6 +46,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 USER nextjs
 

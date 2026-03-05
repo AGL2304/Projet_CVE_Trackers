@@ -1,57 +1,393 @@
-// This is your Prisma schema file,
-// learn more at https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Asset {
-  id                String   @id @default(cuid())
-  name              String
-  type              String
-  ip                String?
-  hostname          String?
-  description       String?
-  criticality       String   @default("medium") // low, medium, high, critical
-  status            String   @default("active") // active, inactive, retired
-  vulnerabilities    Vulnerability[]
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+enum Severity {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
-model Vulnerability {
-  id                String   @id @default(cuid())
-  title             String
-  description       String?
-  severity          String   // low, medium, high, critical
-  status            String   @default("open") // open, in_progress, resolved, ignored
-  cvssScore         Float?
-  cveId             String?  @unique
-  assetId           String?
-  asset             Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  discoveredAt      DateTime @default(now())
-  resolvedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+enum CVEStatus {
+  NEW
+  ANALYZING
+  CONFIRMED
+  REMEDIATED
+  FALSE_POSITIVE
+  WONTFIX
+}
+
+enum CveSource {
+  NVD
+  MITRE
+  OSV
+  CISA_KEV
+  MANUAL
+}
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+  API
+}
+
+enum NotificationType {
+  INFO
+  ALERT
+  REPORT
+  SYNC
+}
+
+enum SyncSource {
+  NVD
+  MITRE
+  OSV
+  CISA_KEV
+  MANUAL
+}
+
+enum SyncJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum PatchStatus {
+  UNKNOWN
+  AFFECTED
+  PATCH_AVAILABLE
+  PATCHED
+  WONT_FIX
+}
+
+enum ReportFormat {
+  PDF
+  CSV
+  JSON
+}
+
+enum ReportStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 model CVE {
-  id                String   @id @default(cuid())
-  cveId             String   @unique
-  description       String
-  severity          String   // low, medium, high, critical
-  cvssScore         Float?
-  cvssVector        String?
-  publishedDate     DateTime?
-  lastModifiedDate  DateTime?
-  references        String?  // JSON array of reference URLs
-  vulnStatus        String?
-  importedAt        DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id           String    @id @default(cuid())
+  cveId        String    @unique
+  title        String
+  description  String
+  publishedAt  DateTime?
+  modifiedAt   DateTime?
+  cvssV3Score  Float?
+  cvssV3Vector String?
+  cvssV4Score  Float?
+  epssScore    Float?
+  status       CVEStatus @default(NEW)
+  severity     Severity  @default(NONE)
+  source       CveSource @default(NVD)
+  rawData      Json?
+  references   String?
+  vulnStatus   String?
+  importedAt   DateTime  @default(now())
+  version      Int       @default(1)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Legacy compatibility with v1 API/frontend
+  cvssScore        Float?
+  cvssVector       String?
+  publishedDate    DateTime?
+  lastModifiedDate DateTime?
+
+  comments      Comment[]
+  notifications Notification[]
+  cweLinks      CVECWE[]
+  productLinks  ProductCVE[]
+  tagLinks      CVETag[]
+
+  @@index([severity])
+  @@index([status])
+  @@index([source])
+  @@index([publishedAt])
+  @@index([updatedAt])
+}
+
+model CWE {
+  id          String   @id @default(cuid())
+  cweId       String   @unique
+  name        String
+  description String?
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cveLinks CVECWE[]
+
+  @@index([category])
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  name      String
+  vendor    String
+  version   String?
+  cpe       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cveLinks   ProductCVE[]
+  assetLinks AssetProduct[]
+
+  @@unique([name, vendor, version])
+  @@index([vendor])
+  @@index([name])
+  @@index([cpe])
+}
+
+model ProductCVE {
+  id          String      @id @default(cuid())
+  productId   String
+  cveId       String
+  patchStatus PatchStatus @default(UNKNOWN)
+  notes       String?
+  patchedAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cve     CVE     @relation(fields: [cveId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, cveId])
+  @@index([patchStatus])
+}
+
+model Asset {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  hostname    String?
+  ip          String?
+  ownerId     String?
+  tags        String[] @default([])
+  description String?
+  criticality String   @default("medium")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner           User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  vulnerabilities Vulnerability[]
+  productLinks    AssetProduct[]
+  tagLinks        AssetTag[]
+
+  @@index([ownerId])
+  @@index([type])
+  @@index([hostname])
+  @@index([ip])
+}
+
+model AssetProduct {
+  id        String   @id @default(cuid())
+  assetId   String
+  productId String
+  createdAt DateTime @default(now())
+
+  asset   Asset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, productId])
+}
+
+model Vulnerability {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  severity     String
+  status       String    @default("open")
+  cvssScore    Float?
+  cveId        String?   @unique
+  assetId      String?
+  discoveredAt DateTime  @default(now())
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([severity])
+  @@index([status])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  role         UserRole  @default(VIEWER)
+  lastLogin    DateTime?
+  mfaEnabled   Boolean   @default(false)
+  preferences  Json?
+  deletedAt    DateTime?
+  anonymizedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assetsOwned   Asset[]
+  notifications Notification[]
+  comments      Comment[]
+  auditLogs     AuditLog[]
+  syncJobs      SyncJob[]
+  reportJobs    ReportJob[]
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType @default(INFO)
+  severity  Severity         @default(NONE)
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  userId    String
+  cveId     String?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cve  CVE? @relation(fields: [cveId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([timestamp])
+}
+
+model SyncJob {
+  id            String        @id @default(cuid())
+  source        SyncSource
+  status        SyncJobStatus @default(QUEUED)
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  newCount      Int           @default(0)
+  updatedCount  Int           @default(0)
+  errorCount    Int           @default(0)
+  logs          Json?
+  triggeredById String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  triggeredBy User? @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@index([source, status])
+  @@index([startedAt])
+}
+
+model ReportJob {
+  id            String       @id @default(cuid())
+  format        ReportFormat
+  status        ReportStatus @default(QUEUED)
+  requestedById String?
+  filter        Json?
+  storagePath   String?
+  webhookUrl    String?
+  errorMessage  String?
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+
+  requestedBy User? @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  cveId     String
+  userId    String
+  content   String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deleted   Boolean  @default(false)
+
+  cve     CVE       @relation(fields: [cveId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: SetNull)
+  replies Comment[] @relation("CommentThread")
+
+  @@index([cveId, createdAt])
+  @@index([userId])
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cveLinks   CVETag[]
+  assetLinks AssetTag[]
+}
+
+model CVECWE {
+  id        String   @id @default(cuid())
+  cveId     String
+  cweId     String
+  createdAt DateTime @default(now())
+
+  cve CVE @relation(fields: [cveId], references: [id], onDelete: Cascade)
+  cwe CWE @relation(fields: [cweId], references: [id], onDelete: Cascade)
+
+  @@unique([cveId, cweId])
+}
+
+model CVETag {
+  id        String   @id @default(cuid())
+  cveId     String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  cve CVE @relation(fields: [cveId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([cveId, tagId])
+}
+
+model AssetTag {
+  id        String   @id @default(cuid())
+  assetId   String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, tagId])
 }

@@ -1,507 +1,479 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Server, Plus, Edit, Trash2, Search } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { toast } from '@/hooks/use-toast'
+import * as React from "react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { scaleLinear } from "d3-scale";
+import { ResponsiveContainer, Treemap, Tooltip } from "recharts";
+import { AlertTriangle, Database, FileUp, Plus, Trash2 } from "lucide-react";
+import { useAssets, useCVEs } from "@/hooks/queries";
+import { normalizeCve } from "@/lib/cve-helpers";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/states/empty-state";
+import { LoadingGrid } from "@/components/states/loading-grid";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "@/hooks/use-toast";
 
-interface Asset {
-  id: string
-  name: string
-  type: string
-  ip?: string
-  hostname?: string
-  description?: string
-  criticality: string
-  status: string
-  createdAt: string
-}
+const assetSchema = z.object({
+  name: z.string().min(2, "Nom requis"),
+  type: z.string().min(2, "Type requis"),
+  ip: z.string().optional(),
+  hostname: z.string().optional(),
+  description: z.string().optional(),
+  criticality: z.enum(["low", "medium", "high", "critical"]),
+  status: z.enum(["active", "inactive", "retired"]),
+});
 
-const errorMsg = "Échec de l'opération"
+type AssetFormValues = z.infer<typeof assetSchema>;
 
 export default function AssetsPage() {
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [csvLoading, setCsvLoading] = React.useState(false);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    type: '',
-    ip: '',
-    hostname: '',
-    description: '',
-    criticality: 'medium',
-    status: 'active',
-  })
+  const { data: assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets();
+  const { data: cves, isLoading: cvesLoading } = useCVEs();
 
-  useEffect(() => {
-    fetchAssets()
-  }, [])
+  const cveRecords = React.useMemo(() => (cves ?? []).map(normalizeCve), [cves]);
 
-  async function fetchAssets() {
+  const form = useForm<AssetFormValues>({
+    resolver: zodResolver(assetSchema),
+    defaultValues: {
+      name: "",
+      type: "server",
+      ip: "",
+      hostname: "",
+      description: "",
+      criticality: "medium",
+      status: "active",
+    },
+  });
+
+  const mappedAssets = React.useMemo(() => {
+    return (assets ?? []).map((asset) => {
+      const name = asset.name.toLowerCase();
+      const type = asset.type.toLowerCase();
+
+      const linked = cveRecords.filter((cve) => {
+        const source = `${cve.description} ${cve.product} ${cve.vendor}`.toLowerCase();
+        return source.includes(name) || source.includes(type);
+      });
+
+      const exposureScore = linked.reduce((sum, row) => sum + (row.cvssScore ?? 4), 0);
+
+      return {
+        ...asset,
+        linkedCves: linked,
+        linkedCount: linked.length,
+        exposureScore: Number(exposureScore.toFixed(1)),
+      };
+    });
+  }, [assets, cveRecords]);
+
+  const treemapData = React.useMemo(
+    () =>
+      mappedAssets.map((asset) => ({
+        name: asset.name,
+        size: Math.max(asset.exposureScore, 1),
+        criticality: asset.criticality,
+      })),
+    [mappedAssets]
+  );
+
+  const createAsset = form.handleSubmit(async (values) => {
     try {
-      const response = await fetch('/api/assets')
-      if (response.ok) {
-        const data = await response.json()
-        setAssets(Array.isArray(data) ? data : [])
-      }
+      const response = await fetch("/api/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) throw new Error("asset create failed");
+
+      toast({ title: "Actif créé", description: `${values.name} ajouté.` });
+      form.reset();
+      setDialogOpen(false);
+      await refetchAssets();
     } catch (error) {
-      console.error('Error fetching assets:', error)
-      setAssets([])
+      console.error(error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de créer l'actif.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteAsset = async (id: string) => {
+    try {
+      const response = await fetch(`/api/assets/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("delete failed");
+
+      toast({ title: "Actif supprimé" });
+      await refetchAssets();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erreur",
+        description: "Suppression impossible.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const importCsv = async (file: File) => {
+    setCsvLoading(true);
+    try {
+      const text = await file.text();
+      const rows = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      if (rows.length <= 1) throw new Error("CSV vide");
+
+      const [header, ...dataRows] = rows;
+      const columns = header.split(",").map((part) => part.trim().toLowerCase());
+
+      const payloads = dataRows.map((row) => {
+        const cells = row.split(",").map((cell) => cell.trim());
+        const entry: Record<string, string> = {};
+        columns.forEach((column, index) => {
+          entry[column] = cells[index] ?? "";
+        });
+
+        return {
+          name: entry.name,
+          type: entry.type || "server",
+          ip: entry.ip || null,
+          hostname: entry.hostname || null,
+          description: entry.description || null,
+          criticality: (entry.criticality || "medium") as AssetFormValues["criticality"],
+          status: (entry.status || "active") as AssetFormValues["status"],
+        };
+      });
+
+      let imported = 0;
+
+      for (const payload of payloads) {
+        const response = await fetch("/api/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) imported += 1;
+      }
+
+      toast({ title: "Import CSV", description: `${imported}/${payloads.length} assets importés.` });
+      await refetchAssets();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Import CSV échoué",
+        description: "Vérifiez le format: name,type,ip,hostname,description,criticality,status",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false)
+      setCsvLoading(false);
     }
-  }
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    try {
-      const url = selectedAsset ? `/api/assets/${selectedAsset.id}` : '/api/assets'
-      const method = selectedAsset ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        toast({
-          title: 'Succès',
-          description: selectedAsset ? 'Actif mis à jour' : 'Actif créé',
-        })
-        setIsCreateDialogOpen(false)
-        setIsEditDialogOpen(false)
-        setFormData({
-          name: '',
-          type: '',
-          ip: '',
-          hostname: '',
-          description: '',
-          criticality: 'medium',
-          status: 'active',
-        })
-        setSelectedAsset(null)
-        fetchAssets()
-      } else {
-        toast({
-          title: 'Erreur',
-          description: errorMsg,
-          variant: 'destructive',
-        })
-      }
-    } catch (error) {
-      console.error('Error submitting form:', error)
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet actif ?')) return
-
-    try {
-      const response = await fetch(`/api/assets/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        toast({
-          title: 'Succès',
-          description: 'Actif supprimé',
-        })
-        fetchAssets()
-      }
-    } catch (error) {
-      console.error('Error deleting asset:', error)
-    }
-  }
-
-  function handleEdit(asset: Asset) {
-    setSelectedAsset(asset)
-    setFormData({
-      name: asset.name,
-      type: asset.type,
-      ip: asset.ip || '',
-      hostname: asset.hostname || '',
-      description: asset.description || '',
-      criticality: asset.criticality,
-      status: asset.status,
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  function getCriticalityBadge(criticality: string) {
-    const colors = {
-      low: 'bg-green-100 text-green-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800',
-    }
-    const labels = {
-      low: 'Faible',
-      medium: 'Moyenne',
-      high: 'Haute',
-      critical: 'Critique',
-    }
+  if (assetsLoading || cvesLoading) {
     return (
-      <Badge className={colors[criticality as keyof typeof colors] || 'bg-gray-100'}>
-        {labels[criticality as keyof typeof labels] || criticality}
-      </Badge>
-    )
-  }
-
-  function getStatusBadge(status: string) {
-    const colors = {
-      active: 'bg-green-100 text-green-800',
-      inactive: 'bg-gray-100 text-gray-800',
-      retired: 'bg-red-100 text-red-800',
-    }
-    const labels = {
-      active: 'Actif',
-      inactive: 'Inactif',
-      retired: 'Retiré',
-    }
-    return (
-      <Badge className={colors[status as keyof typeof colors] || 'bg-gray-100'}>
-        {labels[status as keyof typeof labels] || status}
-      </Badge>
-    )
-  }
-
-  const filteredAssets = assets.filter(asset =>
-    asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    asset.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    asset.ip?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    asset.hostname?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 rounded w-48" />
-          <div className="h-96 bg-slate-200 rounded" />
-        </div>
+      <div className="p-6 lg:p-8">
+        <LoadingGrid rows={8} />
       </div>
-    )
+    );
+  }
+
+  if (assetsError) {
+    return (
+      <div className="p-6 lg:p-8">
+        <EmptyState
+          title="Assets indisponibles"
+          description="Impossible de charger l'inventaire assets."
+          actionLabel="Réessayer"
+          onAction={() => {
+            void refetchAssets();
+          }}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Actifs</h1>
-          <p className="text-muted-foreground mt-1">
-            Gérez votre infrastructure et vos ressources
-          </p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvel Actif
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Créer un nouvel actif</DialogTitle>
-              <DialogDescription>
-                Ajoutez un nouvel actif à votre inventaire
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nom</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Type</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue placeholder="Sélectionner un type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="server">Serveur</SelectItem>
-                    <SelectItem value="database">Base de données</SelectItem>
-                    <SelectItem value="application">Application</SelectItem>
-                    <SelectItem value="network">Équipement réseau</SelectItem>
-                    <SelectItem value="container">Conteneur</SelectItem>
-                    <SelectItem value="other">Autre</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="ip">Adresse IP</Label>
-                  <Input
-                    id="ip"
-                    value={formData.ip}
-                    onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hostname">Nom d&apos;hôte</Label>
-                  <Input
-                    id="hostname"
-                    value={formData.hostname}
-                    onChange={(e) => setFormData({ ...formData, hostname: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="criticality">Criticité</Label>
-                  <Select
-                    value={formData.criticality}
-                    onValueChange={(value) => setFormData({ ...formData, criticality: value })}
-                  >
-                    <SelectTrigger id="criticality">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Faible</SelectItem>
-                      <SelectItem value="medium">Moyenne</SelectItem>
-                      <SelectItem value="high">Haute</SelectItem>
-                      <SelectItem value="critical">Critique</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Statut</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Actif</SelectItem>
-                      <SelectItem value="inactive">Inactif</SelectItem>
-                      <SelectItem value="retired">Retiré</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button type="submit" className="w-full">
-                Créer l&apos;actif
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Liste des Actifs</CardTitle>
-          <CardDescription>
-            {assets.length} actif{assets.length !== 1 ? 's' : ''} dans l&apos;inventaire
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher un actif..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+    <div className="space-y-6 p-6 lg:p-8">
+      <PageHeader
+        title="Gestion des actifs"
+        description="Inventaire serveurs/applications/containers avec mapping CVE et vue Attack Surface"
+        actions={
+          <>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <FileUp className="h-4 w-4" />
+              {csvLoading ? "Import..." : "Import CSV"}
+              <input
+                type="file"
+                className="hidden"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void importCsv(file);
+                    event.target.value = "";
+                  }
+                }}
               />
-            </div>
-          </div>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>IP / Hostname</TableHead>
-                  <TableHead>Criticité</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAssets.length === 0 ? (
+            </label>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" /> Nouvel actif
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Créer un actif</DialogTitle>
+                  <DialogDescription>Ajout manuel à l'inventaire SOC</DialogDescription>
+                </DialogHeader>
+
+                <Form {...form}>
+                  <form onSubmit={createAsset} className="space-y-3">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>Nom</Label>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Label>Type</Label>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="ip"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Label>IP</Label>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="criticality"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Label>Criticité</Label>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="low">low</SelectItem>
+                                <SelectItem value="medium">medium</SelectItem>
+                                <SelectItem value="high">high</SelectItem>
+                                <SelectItem value="critical">critical</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="status"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Label>Statut</Label>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="active">active</SelectItem>
+                                <SelectItem value="inactive">inactive</SelectItem>
+                                <SelectItem value="retired">retired</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <Button type="submit" className="w-full">
+                      Ajouter
+                    </Button>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </>
+        }
+      />
+
+      <section className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
+        <Card className="card-elevated">
+          <CardHeader>
+            <CardTitle>Inventaire des assets</CardTitle>
+            <CardDescription>Mapping CVE par actif avec score d'exposition</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {mappedAssets.length === 0 ? (
+              <EmptyState title="Aucun actif" description="Créez un actif ou importez un CSV pour commencer." />
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      <div className="flex flex-col items-center gap-2">
-                        <Server className="h-8 w-8 text-muted-foreground" />
-                        <p>Aucun actif trouvé</p>
-                      </div>
-                    </TableCell>
+                    <TableHead>Nom</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Criticité</TableHead>
+                    <TableHead>CVEs liées</TableHead>
+                    <TableHead>Attack score</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredAssets.map((asset) => (
+                </TableHeader>
+                <TableBody>
+                  {mappedAssets.map((asset) => (
                     <TableRow key={asset.id}>
                       <TableCell className="font-medium">{asset.name}</TableCell>
                       <TableCell>{asset.type}</TableCell>
                       <TableCell>
-                        <div className="text-sm">
-                          {asset.ip && <div>{asset.ip}</div>}
-                          {asset.hostname && <div className="text-muted-foreground">{asset.hostname}</div>}
-                        </div>
+                        <Badge variant="outline">{asset.criticality}</Badge>
                       </TableCell>
-                      <TableCell>{getCriticalityBadge(asset.criticality)}</TableCell>
-                      <TableCell>{getStatusBadge(asset.status)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell>{asset.linkedCount}</TableCell>
+                      <TableCell>{asset.exposureScore}</TableCell>
+                      <TableCell>
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(asset)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(asset.id)}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => void deleteAsset(asset.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="card-elevated">
+          <CardHeader>
+            <CardTitle>Attack Surface</CardTitle>
+            <CardDescription>Visualisation exposition par asset</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {treemapData.length === 0 ? (
+              <EmptyState title="Pas de surface" description="Ajoutez des assets pour afficher la surface d'attaque." />
+            ) : (
+              <div className="h-[360px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap
+                    data={treemapData}
+                    dataKey="size"
+                    stroke="var(--border)"
+                    fill="#0ea5e9"
+                    content={<CustomizedTreemap />}
+                  >
+                    <Tooltip formatter={(value) => [`${value}`, "Exposure"]} />
+                  </Treemap>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            <div className="mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+              Plus la surface est grande, plus l'exposition cumulative CVE est élevée.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="card-elevated">
+        <CardHeader>
+          <CardTitle>Intégration CMDB</CardTitle>
+          <CardDescription>Import en masse CSV prêt pour extension connecteur CMDB</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            Format attendu: <code>name,type,ip,hostname,description,criticality,status</code>
+            <br />
+            La logique d'import est prête pour intégrer ultérieurement ServiceNow/GLPI/CMDB interne.
           </div>
         </CardContent>
       </Card>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modifier l&apos;actif</DialogTitle>
-            <DialogDescription>
-              Mettez à jour les informations de l&apos;actif
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Nom</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-type">Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => setFormData({ ...formData, type: value })}
-              >
-                <SelectTrigger id="edit-type">
-                  <SelectValue placeholder="Sélectionner un type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="server">Serveur</SelectItem>
-                  <SelectItem value="database">Base de données</SelectItem>
-                  <SelectItem value="application">Application</SelectItem>
-                  <SelectItem value="network">Équipement réseau</SelectItem>
-                  <SelectItem value="container">Conteneur</SelectItem>
-                  <SelectItem value="other">Autre</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-ip">Adresse IP</Label>
-                <Input
-                  id="edit-ip"
-                  value={formData.ip}
-                  onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-hostname">Nom d&apos;hôte</Label>
-                <Input
-                  id="edit-hostname"
-                  value={formData.hostname}
-                  onChange={(e) => setFormData({ ...formData, hostname: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Input
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-criticality">Criticité</Label>
-                <Select
-                  value={formData.criticality}
-                  onValueChange={(value) => setFormData({ ...formData, criticality: value })}
-                >
-                  <SelectTrigger id="edit-criticality">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Faible</SelectItem>
-                    <SelectItem value="medium">Moyenne</SelectItem>
-                    <SelectItem value="high">Haute</SelectItem>
-                    <SelectItem value="critical">Critique</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Statut</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger id="edit-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Actif</SelectItem>
-                    <SelectItem value="inactive">Inactif</SelectItem>
-                    <SelectItem value="retired">Retiré</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Button type="submit" className="w-full">
-              Mettre à jour l&apos;actif
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
-  )
+  );
+}
+
+function CustomizedTreemap(props: any) {
+  const { x, y, width, height, name, value } = props;
+  const intensity = scaleLinear<string>().domain([0, 100]).range(["#38bdf8", "#1e293b"])(Number(value));
+
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} style={{ fill: intensity, stroke: "var(--border)" }} />
+      {width > 80 && height > 24 ? (
+        <text x={x + 6} y={y + 16} fill="#ffffff" fontSize={11}>
+          {name}
+        </text>
+      ) : null}
+    </g>
+  );
 }

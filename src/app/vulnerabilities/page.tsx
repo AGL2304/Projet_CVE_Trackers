@@ -1,566 +1,411 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Edit, Trash2, AlertTriangle, Search, Filter } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { toast } from '@/hooks/use-toast'
+import * as React from "react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, Search } from "lucide-react";
+import { useAssets, useVulnerabilities } from "@/hooks/queries";
+import { PageHeader } from "@/components/page-header";
+import { SeverityBadge } from "@/components/severity-badge";
+import { EmptyState } from "@/components/states/empty-state";
+import { LoadingGrid } from "@/components/states/loading-grid";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "@/hooks/use-toast";
 
-interface Vulnerability {
-  id: string
-  title: string
-  description?: string
-  severity: string
-  status: string
-  cvssScore?: number
-  cveId?: string
-  asset?: {
-    id: string
-    name: string
-  }
-  discoveredAt: string
-  resolvedAt?: string
-}
+const vulnerabilitySchema = z.object({
+  title: z.string().min(3, "Titre requis"),
+  description: z.string().optional(),
+  severity: z.enum(["critical", "high", "medium", "low"]),
+  status: z.enum(["open", "in_progress", "resolved", "ignored"]),
+  cvssScore: z.string().optional(),
+  cveId: z.string().optional(),
+  assetId: z.string().optional(),
+});
+
+type VulnerabilityValues = z.infer<typeof vulnerabilitySchema>;
 
 export default function VulnerabilitiesPage() {
-  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [severityFilter, setSeverityFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedVulnerability, setSelectedVulnerability] = useState<Vulnerability | null>(null)
+  const { data: vulnerabilities, isLoading, isError, refetch } = useVulnerabilities();
+  const { data: assets } = useAssets();
 
-  // Form state
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    severity: 'medium',
-    status: 'open',
-    cvssScore: '',
-    cveId: '',
-    assetId: '',
-  })
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [severityFilter, setSeverityFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
 
-  useEffect(() => {
-    fetchVulnerabilities()
-  }, [])
+  const form = useForm<VulnerabilityValues>({
+    resolver: zodResolver(vulnerabilitySchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      severity: "medium",
+      status: "open",
+      cvssScore: "5.0",
+      cveId: "",
+      assetId: "",
+    },
+  });
 
-  async function fetchVulnerabilities() {
+  const filtered = React.useMemo(() => {
+    return (vulnerabilities ?? []).filter((item) => {
+      const source = `${item.title} ${item.description ?? ""} ${item.cveId ?? ""}`.toLowerCase();
+      const searchOk = search.trim().length === 0 || source.includes(search.toLowerCase());
+      const severityOk = severityFilter === "all" || item.severity === severityFilter;
+      const statusOk = statusFilter === "all" || item.status === statusFilter;
+      return searchOk && severityOk && statusOk;
+    });
+  }, [vulnerabilities, search, severityFilter, statusFilter]);
+
+  const createVulnerability = form.handleSubmit(async (values) => {
+    const numericCvss = values.cvssScore ? Number.parseFloat(values.cvssScore) : undefined;
+
     try {
-      const response = await fetch('/api/vulnerabilities')
-      if (response.ok) {
-        const data = await response.json()
-        setVulnerabilities(data.vulnerabilities || [])
-      }
-    } catch (error) {
-      console.error('Error fetching vulnerabilities:', error)
-      setVulnerabilities([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    try {
-      const url = selectedVulnerability
-        ? `/api/vulnerabilities/${selectedVulnerability.id}`
-        : '/api/vulnerabilities'
-      const method = selectedVulnerability ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/vulnerabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
-          cvssScore: formData.cvssScore ? parseFloat(formData.cvssScore) : null,
-          assetId: formData.assetId || null,
+          ...values,
+          cvssScore: Number.isNaN(numericCvss) ? undefined : numericCvss,
         }),
-      })
+      });
 
-      if (response.ok) {
-        toast({
-          title: 'Succès',
-          description: selectedVulnerability
-            ? 'Vulnérabilité mise à jour'
-            : 'Vulnérabilité créée',
-        })
-        setIsCreateDialogOpen(false)
-        setIsEditDialogOpen(false)
-        setFormData({
-          title: '',
-          description: '',
-          severity: 'medium',
-          status: 'open',
-          cvssScore: '',
-          cveId: '',
-          assetId: '',
-        })
-        setSelectedVulnerability(null)
-        fetchVulnerabilities()
-      } else {
-        toast({
-          title: 'Erreur',
-          description: 'Échec de l\'opération',
-          variant: 'destructive',
-        })
-      }
+      if (!response.ok) throw new Error("create failed");
+
+      toast({ title: "Vulnérabilité créée", description: values.title });
+      form.reset();
+      setDialogOpen(false);
+      await refetch();
     } catch (error) {
-      console.error('Error submitting form:', error)
+      console.error(error);
+      toast({ title: "Erreur", description: "Création impossible", variant: "destructive" });
     }
-  }
+  });
 
-  async function handleDelete(id: string) {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette vulnérabilité ?')) return
+  const updateStatus = async (id: string, status: string) => {
+    const current = vulnerabilities?.find((item) => item.id === id);
+    if (!current) return;
 
     try {
       const response = await fetch(`/api/vulnerabilities/${id}`, {
-        method: 'DELETE',
-      })
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...current,
+          status,
+          assetId: current.asset?.id ?? null,
+        }),
+      });
 
-      if (response.ok) {
-        toast({
-          title: 'Succès',
-          description: 'Vulnérabilité supprimée',
-        })
-        fetchVulnerabilities()
-      }
+      if (!response.ok) throw new Error("update failed");
+      toast({ title: "Statut mis à jour", description: `${current.title} -> ${status}` });
+      await refetch();
     } catch (error) {
-      console.error('Error deleting vulnerability:', error)
+      console.error(error);
+      toast({ title: "Erreur", description: "Mise à jour impossible", variant: "destructive" });
     }
-  }
+  };
 
-  function handleEdit(vulnerability: Vulnerability) {
-    setSelectedVulnerability(vulnerability)
-    setFormData({
-      title: vulnerability.title,
-      description: vulnerability.description || '',
-      severity: vulnerability.severity,
-      status: vulnerability.status,
-      cvssScore: vulnerability.cvssScore?.toString() || '',
-      cveId: vulnerability.cveId || '',
-      assetId: vulnerability.asset?.id || '',
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  function getSeverityBadge(severity: string) {
-    const colors = {
-      low: 'bg-green-100 text-green-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800',
-    }
-    const labels = {
-      low: 'Faible',
-      medium: 'Moyenne',
-      high: 'Haute',
-      critical: 'Critique',
-    }
+  if (isLoading) {
     return (
-      <Badge className={colors[severity as keyof typeof colors]}>
-        {labels[severity as keyof typeof labels] || severity}
-      </Badge>
-    )
-  }
-
-  function getStatusBadge(status: string) {
-    const colors = {
-      open: 'bg-red-100 text-red-800',
-      in_progress: 'bg-orange-100 text-orange-800',
-      resolved: 'bg-green-100 text-green-800',
-      ignored: 'bg-gray-100 text-gray-800',
-    }
-    const labels = {
-      open: 'Ouvert',
-      in_progress: 'En cours',
-      resolved: 'Résolu',
-      ignored: 'Ignoré',
-    }
-    return (
-      <Badge className={colors[status as keyof typeof colors]}>
-        {labels[status as keyof typeof labels] || status}
-      </Badge>
-    )
-  }
-
-  const filteredVulnerabilities = vulnerabilities.filter((vuln) => {
-    const matchesSearch =
-      vuln.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vuln.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vuln.cveId?.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesSeverity = severityFilter === 'all' || vuln.severity === severityFilter
-    const matchesStatus = statusFilter === 'all' || vuln.status === statusFilter
-
-    return matchesSearch && matchesSeverity && matchesStatus
-  })
-
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 rounded w-48" />
-          <div className="h-96 bg-slate-200 rounded" />
-        </div>
+      <div className="p-6 lg:p-8">
+        <LoadingGrid rows={10} />
       </div>
-    )
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 lg:p-8">
+        <EmptyState
+          title="Vulnérabilités indisponibles"
+          description="Impossible de charger le backlog de vulnérabilités."
+          actionLabel="Réessayer"
+          onAction={() => {
+            void refetch();
+          }}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Vulnérabilités</h1>
-          <p className="text-muted-foreground mt-1">
-            Suivi et gestion des vulnérabilités de sécurité
-          </p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvelle Vulnérabilité
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Créer une nouvelle vulnérabilité</DialogTitle>
-              <DialogDescription>
-                Signalez une nouvelle vulnérabilité dans le système
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Titre</Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="severity">Sévérité</Label>
-                  <Select
-                    value={formData.severity}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, severity: value })
-                    }
-                  >
-                    <SelectTrigger id="severity">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Faible</SelectItem>
-                      <SelectItem value="medium">Moyenne</SelectItem>
-                      <SelectItem value="high">Haute</SelectItem>
-                      <SelectItem value="critical">Critique</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Statut</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value })
-                    }
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Ouvert</SelectItem>
-                      <SelectItem value="in_progress">En cours</SelectItem>
-                      <SelectItem value="resolved">Résolu</SelectItem>
-                      <SelectItem value="ignored">Ignoré</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cvssScore">Score CVSS</Label>
-                  <Input
-                    id="cvssScore"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={formData.cvssScore}
-                    onChange={(e) =>
-                      setFormData({ ...formData, cvssScore: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cveId">CVE ID</Label>
-                  <Input
-                    id="cveId"
-                    placeholder="CVE-2024-1234"
-                    value={formData.cveId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, cveId: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <Button type="submit" className="w-full">
-                Créer la vulnérabilité
+    <div className="space-y-6 p-6 lg:p-8">
+      <PageHeader
+        title="Vulnérabilités"
+        description="Backlog opérationnel de suivi et remédiation"
+        actions={
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" /> Nouvelle vulnérabilité
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Créer une vulnérabilité</DialogTitle>
+                <DialogDescription>Déclaration manuelle d'une vulnérabilité interne</DialogDescription>
+              </DialogHeader>
 
-      <Card>
+              <Form {...form}>
+                <form className="space-y-3" onSubmit={createVulnerability}>
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label>Titre</Label>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label>Description</Label>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="severity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>Sévérité</Label>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="critical">critical</SelectItem>
+                              <SelectItem value="high">high</SelectItem>
+                              <SelectItem value="medium">medium</SelectItem>
+                              <SelectItem value="low">low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>Statut</Label>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="open">open</SelectItem>
+                              <SelectItem value="in_progress">in_progress</SelectItem>
+                              <SelectItem value="resolved">resolved</SelectItem>
+                              <SelectItem value="ignored">ignored</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="cvssScore"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>CVSS</Label>
+                          <FormControl>
+                            <Input type="number" min={0} max={10} step={0.1} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="cveId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>CVE ID</Label>
+                          <FormControl>
+                            <Input placeholder="CVE-2026-XXXX" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="assetId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label>Asset lié</Label>
+                        <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Sélection" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {(assets ?? []).map((asset) => (
+                              <SelectItem key={asset.id} value={asset.id}>
+                                {asset.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button type="submit" className="w-full">
+                    Enregistrer
+                  </Button>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      <Card className="card-elevated">
         <CardHeader>
-          <CardTitle>Liste des Vulnérabilités</CardTitle>
-          <CardDescription>
-            {vulnerabilities.length} vulnérabilité{vulnerabilities.length !== 1 ? 's' : ''} enregistrée{vulnerabilities.length !== 1 ? 's' : ''}
-          </CardDescription>
+          <CardTitle>Filtres</CardTitle>
+          <CardDescription>Recherche, sévérité et statut</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Recherche..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          </div>
+          <Select value={severityFilter} onValueChange={setSeverityFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sévérité" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all</SelectItem>
+              <SelectItem value="critical">critical</SelectItem>
+              <SelectItem value="high">high</SelectItem>
+              <SelectItem value="medium">medium</SelectItem>
+              <SelectItem value="low">low</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Statut" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all</SelectItem>
+              <SelectItem value="open">open</SelectItem>
+              <SelectItem value="in_progress">in_progress</SelectItem>
+              <SelectItem value="resolved">resolved</SelectItem>
+              <SelectItem value="ignored">ignored</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+      <Card className="card-elevated">
+        <CardHeader>
+          <CardTitle>Backlog</CardTitle>
+          <CardDescription>{filtered.length} élément(s)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-40">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Sévérité" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes</SelectItem>
-                <SelectItem value="critical">Critique</SelectItem>
-                <SelectItem value="high">Haute</SelectItem>
-                <SelectItem value="medium">Moyenne</SelectItem>
-                <SelectItem value="low">Faible</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous</SelectItem>
-                <SelectItem value="open">Ouvert</SelectItem>
-                <SelectItem value="in_progress">En cours</SelectItem>
-                <SelectItem value="resolved">Résolu</SelectItem>
-                <SelectItem value="ignored">Ignoré</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="rounded-md border">
+          {filtered.length === 0 ? (
+            <EmptyState title="Aucune vulnérabilité" description="Ajoutez des données ou assouplissez les filtres." />
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Titre</TableHead>
-                  <TableHead>CVE ID</TableHead>
                   <TableHead>Sévérité</TableHead>
                   <TableHead>CVSS</TableHead>
+                  <TableHead>CVE</TableHead>
+                  <TableHead>Asset</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead>Actif</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredVulnerabilities.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                      <div className="flex flex-col items-center gap-2">
-                        <AlertTriangle className="h-8 w-8 text-muted-foreground" />
-                        <p>Aucune vulnérabilité trouvée</p>
-                      </div>
+                {filtered.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.title}</TableCell>
+                    <TableCell>
+                      <SeverityBadge value={item.severity} />
+                    </TableCell>
+                    <TableCell>{item.cvssScore?.toFixed(1) ?? "-"}</TableCell>
+                    <TableCell>{item.cveId ? <Badge variant="outline">{item.cveId}</Badge> : "-"}</TableCell>
+                    <TableCell>{item.asset?.name ?? "-"}</TableCell>
+                    <TableCell>
+                      <Select value={item.status} onValueChange={(value) => void updateStatus(item.id, value)}>
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="open">open</SelectItem>
+                          <SelectItem value="in_progress">in_progress</SelectItem>
+                          <SelectItem value="resolved">resolved</SelectItem>
+                          <SelectItem value="ignored">ignored</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  filteredVulnerabilities.map((vuln) => (
-                    <TableRow key={vuln.id}>
-                      <TableCell className="font-medium">{vuln.title}</TableCell>
-                      <TableCell>
-                        {vuln.cveId ? (
-                          <Badge variant="outline">{vuln.cveId}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{getSeverityBadge(vuln.severity)}</TableCell>
-                      <TableCell>
-                        {vuln.cvssScore !== null && vuln.cvssScore !== undefined ? (
-                          <span className="font-medium">{vuln.cvssScore.toFixed(1)}</span>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(vuln.status)}</TableCell>
-                      <TableCell>
-                        {vuln.asset ? (
-                          <Badge variant="secondary">{vuln.asset.name}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(vuln.discoveredAt).toLocaleDateString('fr-FR')}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(vuln)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(vuln.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
-          </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modifier la vulnérabilité</DialogTitle>
-            <DialogDescription>
-              Mettez à jour les informations de la vulnérabilité
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-title">Titre</Label>
-              <Input
-                id="edit-title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Input
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-severity">Sévérité</Label>
-                <Select
-                  value={formData.severity}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, severity: value })
-                  }
-                >
-                  <SelectTrigger id="edit-severity">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Faible</SelectItem>
-                    <SelectItem value="medium">Moyenne</SelectItem>
-                    <SelectItem value="high">Haute</SelectItem>
-                    <SelectItem value="critical">Critique</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Statut</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger id="edit-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="open">Ouvert</SelectItem>
-                    <SelectItem value="in_progress">En cours</SelectItem>
-                    <SelectItem value="resolved">Résolu</SelectItem>
-                    <SelectItem value="ignored">Ignoré</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-cvssScore">Score CVSS</Label>
-                <Input
-                  id="edit-cvssScore"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={formData.cvssScore}
-                  onChange={(e) =>
-                    setFormData({ ...formData, cvssScore: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-cveId">CVE ID</Label>
-                <Input
-                  id="edit-cveId"
-                  placeholder="CVE-2024-1234"
-                  value={formData.cveId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, cveId: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <Button type="submit" className="w-full">
-              Mettre à jour la vulnérabilité
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
-  )
+  );
 }

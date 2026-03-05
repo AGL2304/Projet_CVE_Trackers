@@ -1,27 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
-import { Sidebar } from "@/components/Sidebar";
+import { AppProviders } from "@/components/providers/app-providers";
+import { AppShell } from "@/components/app-shell";
 
-const geistSans = Geist({
+const primaryFont = Space_Grotesk({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const monoFont = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "CVE Tracker - Système de Gestion des Vulnérabilités",
-  description: "Plateforme moderne de gestion des vulnérabilités et des CVEs",
-  keywords: ["CVE", "Vulnerabilities", "Security", "NVD", "Cybersecurity"],
+  title: "CVE Tracker | Security Operations Frontend",
+  description:
+    "Plateforme SOC pour le suivi des CVEs, la gestion des actifs et le reporting cybersecurity.",
+  keywords: ["CVE", "CVSS", "SOC", "cybersecurity", "vulnerability management"],
   authors: [{ name: "CVE Tracker Team" }],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
 };
 
 export default function RootLayout({
@@ -30,18 +30,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" suppressHydrationWarning>
       <body
-        suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${primaryFont.variable} ${monoFont.variable} min-h-screen bg-background text-foreground antialiased`}
       >
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 overflow-auto">
-            {children}
-          </main>
-        </div>
-        <Toaster />
+        <AppProviders>
+          <AppShell>{children}</AppShell>
+        </AppProviders>
       </body>
     </html>
   );
