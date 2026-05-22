@@ -17,6 +17,12 @@ interface VulnerabilityListResponse {
     total: number;
     pages: number;
   };
+  stats?: {
+    total: number;
+    avgCvss: number;
+    bySeverity: Record<string, number>;
+    byStatus: Record<string, number>;
+  };
 }
 
 interface AssetListResponse {
@@ -96,5 +102,35 @@ export function useVulnerabilities() {
       );
       return payload.vulnerabilities;
     },
+  });
+}
+
+/**
+ * Server-driven vulnerabilities page hook: applies filters/sort/pagination
+ * server-side and exposes the aggregated stats block.
+ */
+export function useVulnerabilitiesPage(filters?: {
+  search?: string;
+  severity?: string;
+  status?: string;
+  assetId?: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.search) params.set("search", filters.search);
+  if (filters?.severity && filters.severity !== "all") params.set("severity", filters.severity);
+  if (filters?.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters?.assetId && filters.assetId !== "all") params.set("assetId", filters.assetId);
+  if (filters?.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters?.sortDir) params.set("sortDir", filters.sortDir);
+  if (filters?.page) params.set("page", String(filters.page));
+  params.set("limit", String(filters?.limit ?? 100));
+
+  return useQuery({
+    queryKey: ["vulnerabilities-page", params.toString()],
+    queryFn: () => fetchJson<VulnerabilityListResponse>(`/api/vulnerabilities?${params.toString()}`),
   });
 }

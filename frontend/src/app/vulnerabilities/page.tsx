@@ -1,11 +1,23 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Search } from "lucide-react";
-import { useAssets, useVulnerabilities } from "@/hooks/queries";
+import {
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Search,
+  ShieldAlert,
+  Trash2,
+  X,
+  XCircle,
+} from "lucide-react";
+import { useAssets, useVulnerabilitiesPage } from "@/hooks/queries";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
 import { EmptyState } from "@/components/states/empty-state";
@@ -22,12 +34,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,86 +55,199 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { includesSearchTerm, normalizeSearchTerm } from "@/lib/search";
+import { fetchJson } from "@/lib/api";
 import { useUiPreferencesStore } from "@/store/ui-preferences";
 
+const SEVERITIES = ["critical", "high", "medium", "low"] as const;
+const STATUSES = ["open", "in_progress", "resolved", "ignored"] as const;
+
 const vulnerabilitySchema = z.object({
-  title: z.string().min(3, "Titre requis"),
+  title: z.string().min(3, "Title required").max(200),
   description: z.string().optional(),
-  severity: z.enum(["critical", "high", "medium", "low"]),
-  status: z.enum(["open", "in_progress", "resolved", "ignored"]),
+  severity: z.enum(SEVERITIES),
+  status: z.enum(STATUSES),
   cvssScore: z.string().optional(),
   cveId: z.string().optional(),
   assetId: z.string().optional(),
 });
 
-type VulnerabilityValues = z.infer<typeof vulnerabilitySchema>;
+type VulnFormValues = z.infer<typeof vulnerabilitySchema>;
+
+type Vulnerability = {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: string;
+  status: string;
+  cvssScore: number | null;
+  cveId: string | null;
+  discoveredAt: string;
+  resolvedAt: string | null;
+  asset: {
+    id: string;
+    name: string;
+    type: string;
+    hostname: string | null;
+    ip: string | null;
+    criticality?: string;
+  } | null;
+};
 
 const copy = {
   fr: {
-    title: "Vulnerabilites",
-    description: "Backlog operationnel de suivi et remediation",
-    newVuln: "Nouvelle vulnerabilite",
-    createVuln: "Creer une vulnerabilite",
-    createDesc: "Declaration manuelle d'une vulnerabilite interne",
+    title: "Vulnérabilités",
+    description: "Backlog opérationnel — suivi, remédiation et SLA",
+    newVuln: "Nouvelle vulnérabilité",
+    createVuln: "Créer une vulnérabilité",
+    editVuln: "Modifier la vulnérabilité",
+    createDesc: "Déclaration manuelle d'une vulnérabilité interne",
+    editDesc: "Modifier la vulnérabilité sélectionnée",
     filters: "Filtres",
-    filtersDesc: "Recherche, severite et statut",
-    search: "Recherche...",
+    search: "Rechercher (titre, description, CVE...)",
     backlog: "Backlog",
-    unavailableTitle: "Vulnerabilites indisponibles",
-    unavailableDesc: "Impossible de charger le backlog de vulnerabilites.",
-    retry: "Reessayer",
-    noDataTitle: "Aucune vulnerabilite",
-    noDataDesc: "Ajoutez des donnees ou assouplissez les filtres.",
-    created: "Vulnerabilite creee",
-    createError: "Creation impossible",
-    statusUpdated: "Statut mis a jour",
-    updateError: "Mise a jour impossible",
+    all: "Tous",
+    asset: "Asset",
+    noResultsTitle: "Aucun résultat",
+    noResultsDesc: "Assouplissez les filtres ou créez une vulnérabilité.",
+    created: "Vulnérabilité créée",
+    updated: "Vulnérabilité mise à jour",
+    deleted: "Vulnérabilité supprimée",
+    createError: "Création impossible",
+    updateError: "Mise à jour impossible",
+    deleteError: "Suppression impossible",
+    statusUpdated: "Statut mis à jour",
+    quickResolve: "Marquer résolu",
     save: "Enregistrer",
+    add: "Ajouter",
+    cancel: "Annuler",
+    delete: "Supprimer",
     titleCol: "Titre",
-    severityCol: "Severite",
+    severityCol: "Sévérité",
     statusCol: "Statut",
-    assetLinked: "Asset lie",
+    discoveredCol: "Découverte",
+    actionsCol: "Actions",
+    none: "Aucun",
+    kpiTotal: "Total",
+    kpiOpen: "Ouvertes",
+    kpiInProgress: "En cours",
+    kpiResolved: "Résolues",
+    kpiAvgCvss: "CVSS moyen",
+    deleteConfirmTitle: "Supprimer cette vulnérabilité ?",
+    deleteConfirmDesc: "Cette action est irréversible.",
+    severity: "Sévérité",
+    status: "Statut",
+    titleField: "Titre",
+    descField: "Description",
+    cve: "CVE",
+    cvss: "CVSS",
+    linkedAsset: "Asset lié",
+    none2: "—",
+    daysOpen: "j ouvert",
+    sortHint: "Cliquez sur une ligne pour modifier",
   },
   en: {
     title: "Vulnerabilities",
-    description: "Operational backlog for tracking and remediation",
+    description: "Operational backlog — tracking, remediation and SLA",
     newVuln: "New vulnerability",
     createVuln: "Create vulnerability",
+    editVuln: "Edit vulnerability",
     createDesc: "Manual declaration of an internal vulnerability",
+    editDesc: "Modify the selected vulnerability",
     filters: "Filters",
-    filtersDesc: "Search, severity and status",
-    search: "Search...",
+    search: "Search (title, description, CVE...)",
     backlog: "Backlog",
-    unavailableTitle: "Vulnerabilities unavailable",
-    unavailableDesc: "Unable to load vulnerabilities backlog.",
-    retry: "Retry",
-    noDataTitle: "No vulnerability",
-    noDataDesc: "Add data or relax filters.",
+    all: "All",
+    asset: "Asset",
+    noResultsTitle: "No results",
+    noResultsDesc: "Relax the filters or create a new vulnerability.",
     created: "Vulnerability created",
+    updated: "Vulnerability updated",
+    deleted: "Vulnerability deleted",
     createError: "Unable to create",
-    statusUpdated: "Status updated",
     updateError: "Update failed",
+    deleteError: "Unable to delete",
+    statusUpdated: "Status updated",
+    quickResolve: "Mark resolved",
     save: "Save",
+    add: "Add",
+    cancel: "Cancel",
+    delete: "Delete",
     titleCol: "Title",
     severityCol: "Severity",
     statusCol: "Status",
-    assetLinked: "Linked asset",
+    discoveredCol: "Discovered",
+    actionsCol: "Actions",
+    none: "None",
+    kpiTotal: "Total",
+    kpiOpen: "Open",
+    kpiInProgress: "In progress",
+    kpiResolved: "Resolved",
+    kpiAvgCvss: "Avg CVSS",
+    deleteConfirmTitle: "Delete this vulnerability?",
+    deleteConfirmDesc: "This is irreversible.",
+    severity: "Severity",
+    status: "Status",
+    titleField: "Title",
+    descField: "Description",
+    cve: "CVE",
+    cvss: "CVSS",
+    linkedAsset: "Linked asset",
+    none2: "—",
+    daysOpen: "d open",
+    sortHint: "Click a row to edit",
   },
 } as const;
+
+const statusBadge = (s: string) => {
+  switch (s) {
+    case "open":
+      return "bg-amber-500/15 text-amber-700 border-amber-500/30";
+    case "in_progress":
+      return "bg-sky-500/15 text-sky-700 border-sky-500/30";
+    case "resolved":
+      return "bg-emerald-500/15 text-emerald-700 border-emerald-500/30";
+    case "ignored":
+      return "bg-slate-500/15 text-slate-600 border-slate-500/30";
+    default:
+      return "";
+  }
+};
 
 export default function VulnerabilitiesPage() {
   const locale = useUiPreferencesStore((state) => state.locale);
   const t = copy[locale];
-  const { data: vulnerabilities, isLoading, isError, refetch } = useVulnerabilities();
   const { data: assets } = useAssets();
 
-  const [dialogOpen, setDialogOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [severityFilter, setSeverityFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [assetFilter, setAssetFilter] = React.useState("all");
+  const [sortBy, setSortBy] = React.useState("createdAt");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Vulnerability | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<Vulnerability | null>(null);
 
-  const form = useForm<VulnerabilityValues>({
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading, isError, refetch } = useVulnerabilitiesPage({
+    search: debouncedSearch,
+    severity: severityFilter,
+    status: statusFilter,
+    assetId: assetFilter,
+    sortBy,
+    sortDir,
+    limit: 200,
+  });
+
+  const items = (data?.vulnerabilities ?? []) as Vulnerability[];
+  const stats = data?.stats;
+
+  const form = useForm<VulnFormValues>({
     resolver: zodResolver(vulnerabilitySchema),
     defaultValues: {
       title: "",
@@ -131,75 +260,104 @@ export default function VulnerabilitiesPage() {
     },
   });
 
-  const filtered = React.useMemo(() => {
-    const normalizedSearch = normalizeSearchTerm(search);
-
-    return (vulnerabilities ?? []).filter((item) => {
-      const source = `${item.title} ${item.description ?? ""} ${item.cveId ?? ""} ${
-        item.asset?.name ?? ""
-      } ${item.asset?.type ?? ""} ${item.asset?.hostname ?? ""} ${item.asset?.ip ?? ""} ${
-        item.status
-      } ${item.severity}`;
-      const searchOk = !normalizedSearch || includesSearchTerm(source, normalizedSearch);
-      const severityOk = severityFilter === "all" || item.severity === severityFilter;
-      const statusOk = statusFilter === "all" || item.status === statusFilter;
-      return searchOk && severityOk && statusOk;
-    });
-  }, [vulnerabilities, search, severityFilter, statusFilter]);
-
-  const createVulnerability = form.handleSubmit(async (values) => {
-    const numericCvss = values.cvssScore ? Number.parseFloat(values.cvssScore) : undefined;
-
-    try {
-      const response = await fetch("/api/vulnerabilities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...values,
-          cvssScore: Number.isNaN(numericCvss) ? undefined : numericCvss,
-        }),
+  React.useEffect(() => {
+    if (editing) {
+      form.reset({
+        title: editing.title,
+        description: editing.description ?? "",
+        severity: editing.severity as VulnFormValues["severity"],
+        status: editing.status as VulnFormValues["status"],
+        cvssScore: editing.cvssScore != null ? String(editing.cvssScore) : "",
+        cveId: editing.cveId ?? "",
+        assetId: editing.asset?.id ?? "",
       });
+      setDialogOpen(true);
+    }
+  }, [editing, form]);
 
-      if (!response.ok) throw new Error("create failed");
-
-      toast({ title: t.created, description: values.title });
+  const save = form.handleSubmit(async (values) => {
+    const numericCvss = values.cvssScore ? Number(values.cvssScore) : undefined;
+    const payload = {
+      ...values,
+      cvssScore: Number.isNaN(numericCvss as number) ? null : numericCvss,
+      assetId: values.assetId === "" || values.assetId === "none" ? null : values.assetId,
+      cveId: values.cveId || null,
+    };
+    try {
+      if (editing) {
+        await fetchJson(`/api/vulnerabilities/${editing.id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        toast({ title: t.updated, description: values.title });
+      } else {
+        await fetchJson("/api/vulnerabilities", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        toast({ title: t.created, description: values.title });
+      }
       form.reset();
+      setEditing(null);
       setDialogOpen(false);
       await refetch();
     } catch (error) {
-      console.error(error);
-      toast({ title: t.createError, variant: "destructive" });
+      const message = error instanceof Error ? error.message : "";
+      toast({
+        title: editing ? t.updateError : t.createError,
+        description: message,
+        variant: "destructive",
+      });
     }
   });
 
   const updateStatus = async (id: string, status: string) => {
-    const current = vulnerabilities?.find((item) => item.id === id);
-    if (!current) return;
-
     try {
-      const response = await fetch(`/api/vulnerabilities/${id}`, {
+      await fetchJson(`/api/vulnerabilities/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...current,
-          status,
-          assetId: current.asset?.id ?? null,
-        }),
+        body: JSON.stringify({ status }),
       });
-
-      if (!response.ok) throw new Error("update failed");
-      toast({ title: t.statusUpdated, description: `${current.title} -> ${status}` });
+      toast({ title: t.statusUpdated });
       await refetch();
     } catch (error) {
-      console.error(error);
-      toast({ title: t.updateError, variant: "destructive" });
+      const message = error instanceof Error ? error.message : "";
+      toast({ title: t.updateError, description: message, variant: "destructive" });
     }
   };
 
-  if (isLoading) {
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await fetchJson(`/api/vulnerabilities/${deleteTarget.id}`, { method: "DELETE" });
+      toast({ title: t.deleted, description: deleteTarget.title });
+      setDeleteTarget(null);
+      await refetch();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      toast({ title: t.deleteError, description: message, variant: "destructive" });
+    }
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setSeverityFilter("all");
+    setStatusFilter("all");
+    setAssetFilter("all");
+  };
+
+  const hasFilters =
+    debouncedSearch || severityFilter !== "all" || statusFilter !== "all" || assetFilter !== "all";
+
+  const daysOpen = (item: Vulnerability) => {
+    if (item.status === "resolved" || item.status === "ignored") return null;
+    const ms = Date.now() - new Date(item.discoveredAt).getTime();
+    return Math.floor(ms / (1000 * 60 * 60 * 24));
+  };
+
+  if (isLoading && !data) {
     return (
       <div className="p-6 lg:p-8">
-        <LoadingGrid rows={10} />
+        <LoadingGrid rows={8} />
       </div>
     );
   }
@@ -208,12 +366,10 @@ export default function VulnerabilitiesPage() {
     return (
       <div className="p-6 lg:p-8">
         <EmptyState
-          title={t.unavailableTitle}
-          description={t.unavailableDesc}
-          actionLabel={t.retry}
-          onAction={() => {
-            void refetch();
-          }}
+          title="Vulnerabilities unavailable"
+          description="Unable to load the backlog."
+          actionLabel="Retry"
+          onAction={() => void refetch()}
         />
       </div>
     );
@@ -225,7 +381,16 @@ export default function VulnerabilitiesPage() {
         title={t.title}
         description={t.description}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) {
+                setEditing(null);
+                form.reset();
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" /> {t.newVuln}
@@ -233,18 +398,18 @@ export default function VulnerabilitiesPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>{t.createVuln}</DialogTitle>
-                <DialogDescription>{t.createDesc}</DialogDescription>
+                <DialogTitle>{editing ? t.editVuln : t.createVuln}</DialogTitle>
+                <DialogDescription>{editing ? t.editDesc : t.createDesc}</DialogDescription>
               </DialogHeader>
 
               <Form {...form}>
-                <form className="space-y-3" onSubmit={createVulnerability}>
+                <form className="space-y-3" onSubmit={save}>
                   <FormField
                     control={form.control}
                     name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <Label>Titre</Label>
+                        <Label>{t.titleField}</Label>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -252,13 +417,12 @@ export default function VulnerabilitiesPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <Label>Description</Label>
+                        <Label>{t.descField}</Label>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -266,14 +430,13 @@ export default function VulnerabilitiesPage() {
                       </FormItem>
                     )}
                   />
-
                   <div className="grid gap-3 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="severity"
                       render={({ field }) => (
                         <FormItem>
-                          <Label>Sévérité</Label>
+                          <Label>{t.severity}</Label>
                           <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
@@ -281,23 +444,23 @@ export default function VulnerabilitiesPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="critical">critical</SelectItem>
-                              <SelectItem value="high">high</SelectItem>
-                              <SelectItem value="medium">medium</SelectItem>
-                              <SelectItem value="low">low</SelectItem>
+                              {SEVERITIES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={form.control}
                       name="status"
                       render={({ field }) => (
                         <FormItem>
-                          <Label>Statut</Label>
+                          <Label>{t.status}</Label>
                           <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
@@ -305,10 +468,11 @@ export default function VulnerabilitiesPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="open">open</SelectItem>
-                              <SelectItem value="in_progress">in_progress</SelectItem>
-                              <SelectItem value="resolved">resolved</SelectItem>
-                              <SelectItem value="ignored">ignored</SelectItem>
+                              {STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -316,14 +480,13 @@ export default function VulnerabilitiesPage() {
                       )}
                     />
                   </div>
-
                   <div className="grid gap-3 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="cvssScore"
                       render={({ field }) => (
                         <FormItem>
-                          <Label>CVSS</Label>
+                          <Label>{t.cvss}</Label>
                           <FormControl>
                             <Input type="number" min={0} max={10} step={0.1} {...field} />
                           </FormControl>
@@ -336,7 +499,7 @@ export default function VulnerabilitiesPage() {
                       name="cveId"
                       render={({ field }) => (
                         <FormItem>
-                          <Label>CVE ID</Label>
+                          <Label>{t.cve} ID</Label>
                           <FormControl>
                             <Input placeholder="CVE-2026-XXXX" {...field} />
                           </FormControl>
@@ -345,24 +508,26 @@ export default function VulnerabilitiesPage() {
                       )}
                     />
                   </div>
-
                   <FormField
                     control={form.control}
                     name="assetId"
                     render={({ field }) => (
                       <FormItem>
-                        <Label>{t.assetLinked}</Label>
-                        <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
+                        <Label>{t.linkedAsset}</Label>
+                        <Select
+                          value={field.value || "none"}
+                          onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
+                        >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Sélection" />
+                              <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {(assets ?? []).map((asset) => (
-                              <SelectItem key={asset.id} value={asset.id}>
-                                {asset.name}
+                            <SelectItem value="none">{t.none}</SelectItem>
+                            {(assets ?? []).map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name} ({a.type})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -371,9 +536,8 @@ export default function VulnerabilitiesPage() {
                       </FormItem>
                     )}
                   />
-
                   <Button type="submit" className="w-full">
-                    {t.save}
+                    {editing ? t.save : t.add}
                   </Button>
                 </form>
               </Form>
@@ -382,94 +546,276 @@ export default function VulnerabilitiesPage() {
         }
       />
 
+      {/* KPIs */}
+      <section className="grid gap-4 md:grid-cols-5">
+        <Kpi label={t.kpiTotal} value={stats?.total ?? items.length} />
+        <Kpi
+          label={t.kpiOpen}
+          value={stats?.byStatus?.open ?? 0}
+          accent="text-amber-600"
+          icon={<ShieldAlert className="h-4 w-4" />}
+        />
+        <Kpi
+          label={t.kpiInProgress}
+          value={stats?.byStatus?.in_progress ?? 0}
+          accent="text-sky-600"
+          icon={<Clock className="h-4 w-4" />}
+        />
+        <Kpi
+          label={t.kpiResolved}
+          value={stats?.byStatus?.resolved ?? 0}
+          accent="text-emerald-600"
+          icon={<CheckCircle2 className="h-4 w-4" />}
+        />
+        <Kpi label={t.kpiAvgCvss} value={(stats?.avgCvss ?? 0).toFixed(2)} />
+      </section>
+
+      {/* Filters */}
       <Card className="card-elevated">
-        <CardHeader>
-          <CardTitle>{t.filters}</CardTitle>
-          <CardDescription>{t.filtersDesc}</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">{t.filters}</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+        <CardContent className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1.4fr_auto]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder={t.search} value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input
+              className="pl-9"
+              placeholder={t.search}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
           <Select value={severityFilter} onValueChange={setSeverityFilter}>
             <SelectTrigger>
-              <SelectValue placeholder="Sévérité" />
+              <SelectValue placeholder={t.severity} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">all</SelectItem>
-              <SelectItem value="critical">critical</SelectItem>
-              <SelectItem value="high">high</SelectItem>
-              <SelectItem value="medium">medium</SelectItem>
-              <SelectItem value="low">low</SelectItem>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {SEVERITIES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>
-              <SelectValue placeholder="Statut" />
+              <SelectValue placeholder={t.status} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">all</SelectItem>
-              <SelectItem value="open">open</SelectItem>
-              <SelectItem value="in_progress">in_progress</SelectItem>
-              <SelectItem value="resolved">resolved</SelectItem>
-              <SelectItem value="ignored">ignored</SelectItem>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          <Select value={assetFilter} onValueChange={setAssetFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder={t.asset} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {(assets ?? []).map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={resetFilters}
+            disabled={!hasFilters}
+            title="Reset filters"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </CardContent>
       </Card>
 
       <Card className="card-elevated">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>{t.backlog}</CardTitle>
-          <CardDescription>{filtered.length} élément(s)</CardDescription>
+          <CardDescription>
+            {items.length} / {stats?.total ?? items.length} · {t.sortHint}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {filtered.length === 0 ? (
-            <EmptyState title={t.noDataTitle} description={t.noDataDesc} />
+          {items.length === 0 ? (
+            <EmptyState title={t.noResultsTitle} description={t.noResultsDesc} />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t.titleCol}</TableHead>
-                  <TableHead>{t.severityCol}</TableHead>
-                  <TableHead>CVSS</TableHead>
-                  <TableHead>CVE</TableHead>
-                  <TableHead>Asset</TableHead>
-                  <TableHead>{t.statusCol}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.title}</TableCell>
-                    <TableCell>
-                      <SeverityBadge value={item.severity} />
-                    </TableCell>
-                    <TableCell>{item.cvssScore?.toFixed(1) ?? "-"}</TableCell>
-                    <TableCell>{item.cveId ? <Badge variant="outline">{item.cveId}</Badge> : "-"}</TableCell>
-                    <TableCell>{item.asset?.name ?? "-"}</TableCell>
-                    <TableCell>
-                      <Select value={item.status} onValueChange={(value) => void updateStatus(item.id, value)}>
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">open</SelectItem>
-                          <SelectItem value="in_progress">in_progress</SelectItem>
-                          <SelectItem value="resolved">resolved</SelectItem>
-                          <SelectItem value="ignored">ignored</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.titleCol}</TableHead>
+                    <TableHead>{t.severityCol}</TableHead>
+                    <TableHead className="text-right">{t.cvss}</TableHead>
+                    <TableHead>{t.cve}</TableHead>
+                    <TableHead>{t.asset}</TableHead>
+                    <TableHead>{t.statusCol}</TableHead>
+                    <TableHead className="text-right">{t.discoveredCol}</TableHead>
+                    <TableHead className="text-right">{t.actionsCol}</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => {
+                    const open = daysOpen(item);
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          <div>{item.title}</div>
+                          {item.description && (
+                            <div className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                              {item.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <SeverityBadge value={item.severity} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {item.cvssScore != null ? item.cvssScore.toFixed(1) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {item.cveId ? (
+                            <Link
+                              href={`/cves/${item.cveId}`}
+                              className="inline-flex items-center gap-1 text-sky-600 hover:underline"
+                            >
+                              <Badge variant="outline">{item.cveId}</Badge>
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">{t.none2}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.asset ? (
+                            <div className="text-xs">
+                              <div className="font-medium">{item.asset.name}</div>
+                              <div className="text-muted-foreground">{item.asset.type}</div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">{t.none2}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={item.status}
+                            onValueChange={(value) => void updateStatus(item.id, value)}
+                          >
+                            <SelectTrigger className={`h-8 w-36 text-xs ${statusBadge(item.status)}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          <div>{new Date(item.discoveredAt).toLocaleDateString()}</div>
+                          {open !== null && (
+                            <div className={`mt-0.5 ${open > 30 ? "text-red-600" : "text-muted-foreground"}`}>
+                              {open}{t.daysOpen}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {item.status !== "resolved" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title={t.quickResolve}
+                                onClick={() => void updateStatus(item.id, "resolved")}
+                              >
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Edit"
+                              onClick={() => setEditing(item)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Delete"
+                              onClick={() => setDeleteTarget(item)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.deleteConfirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.deleteConfirmDesc}
+              {deleteTarget && (
+                <div className="mt-2 rounded border bg-muted/40 p-2 text-sm">
+                  <span className="font-medium">{deleteTarget.title}</span>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmDelete()}
+            >
+              {t.delete}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
+function Kpi({
+  label,
+  value,
+  accent,
+  icon,
+}: {
+  label: string;
+  value: number | string;
+  accent?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <Card className="card-elevated">
+      <CardContent className="flex items-center justify-between py-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${accent ?? ""}`}>{value}</p>
+        </div>
+        {icon && <div className="rounded-full bg-muted p-2">{icon}</div>}
+      </CardContent>
+    </Card>
+  );
+}

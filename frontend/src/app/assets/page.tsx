@@ -6,9 +6,21 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { scaleLinear } from "d3-scale";
 import { ResponsiveContainer, Treemap, Tooltip } from "recharts";
-import { AlertTriangle, Database, FileUp, Plus, Trash2 } from "lucide-react";
-import { useAssets, useCVEs } from "@/hooks/queries";
-import { normalizeCve } from "@/lib/cve-helpers";
+import {
+  AlertTriangle,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Database,
+  FileUp,
+  Pencil,
+  Plus,
+  Search,
+  Server,
+  ShieldAlert,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useAssetsPage } from "@/hooks/queries";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/states/empty-state";
 import { LoadingGrid } from "@/components/states/loading-grid";
@@ -24,12 +36,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,117 +57,234 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
+import { fetchJson } from "@/lib/api";
 import { useUiPreferencesStore } from "@/store/ui-preferences";
 
+const CRITICALITIES = ["low", "medium", "high", "critical"] as const;
+const STATUSES = ["active", "inactive", "retired"] as const;
+
 const assetSchema = z.object({
-  name: z.string().min(2, "Nom requis"),
-  type: z.string().min(2, "Type requis"),
+  name: z.string().min(2, "Nom requis (≥ 2 caractères)").max(120),
+  type: z.string().min(2, "Type requis").max(60),
   ip: z.string().optional(),
   hostname: z.string().optional(),
   description: z.string().optional(),
-  criticality: z.enum(["low", "medium", "high", "critical"]),
-  status: z.enum(["active", "inactive", "retired"]),
+  criticality: z.enum(CRITICALITIES),
+  status: z.enum(STATUSES),
 });
 
 type AssetFormValues = z.infer<typeof assetSchema>;
 
+type AssetRow = {
+  id: string;
+  name: string;
+  type: string;
+  hostname: string | null;
+  ip: string | null;
+  criticality: string;
+  status: string;
+  description: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  _count?: { vulnerabilities: number; productLinks: number; tagLinks: number };
+};
+
 const copy = {
   fr: {
     title: "Gestion des actifs",
-    description: "Inventaire serveurs/applications/containers avec mapping CVE",
+    description: "Inventaire serveurs/applications/containers avec cartographie des vulnérabilités",
     importCsv: "Import CSV",
     importing: "Import...",
     newAsset: "Nouvel actif",
-    createAsset: "Creer un actif",
-    createDesc: "Ajout manuel a l'inventaire SOC",
-    assetCreated: "Actif cree",
-    assetDeleted: "Actif supprime",
-    createError: "Impossible de creer l'actif.",
+    createAsset: "Créer un actif",
+    editAsset: "Modifier l'actif",
+    createDesc: "Ajout manuel à l'inventaire SOC",
+    editDesc: "Modifier les informations de l'actif sélectionné",
+    assetCreated: "Actif créé",
+    assetUpdated: "Actif mis à jour",
+    assetDeleted: "Actif supprimé",
+    createError: "Impossible de créer l'actif.",
+    updateError: "Mise à jour impossible.",
     deleteError: "Suppression impossible.",
     csvOk: "Import CSV",
-    csvFailed: "Import CSV echoue",
-    csvFormat: "Verifiez le format: name,type,ip,hostname,description,criticality,status",
+    csvFailed: "Import CSV échoué",
+    csvFormat: "Vérifiez le format: name,type,ip,hostname,description,criticality,status",
+    csvDownload: "Modèle CSV",
     emptyCsv: "CSV vide",
-    unavailableTitle: "Assets indisponibles",
-    unavailableDesc: "Impossible de charger l'inventaire assets.",
-    retry: "Reessayer",
-    inventoryTitle: "Inventaire des assets",
-    inventoryDesc: "Mapping CVE par actif avec score d'exposition",
+    inventoryTitle: "Inventaire",
     noAssetTitle: "Aucun actif",
-    noAssetDesc: "Creez un actif ou importez un CSV pour commencer.",
+    noAssetDesc: "Créez un actif ou importez un CSV pour commencer.",
+    noResultsTitle: "Aucun résultat",
+    noResultsDesc: "Assouplissez les filtres pour afficher plus d'actifs.",
+    surfaceTitle: "Surface d'attaque",
+    surfaceDesc: "Répartition de l'exposition cumulée par actif (vulnérabilités liées + criticité)",
+    surfaceHint: "Les blocs les plus grands représentent les actifs les plus exposés.",
+    noSurfaceTitle: "Pas de surface",
+    noSurfaceDesc: "Ajoutez des actifs et des vulnérabilités pour voir la surface.",
+    filters: "Filtres",
+    search: "Rechercher (nom, IP, hostname, description)",
+    all: "Tous",
     name: "Nom",
     type: "Type",
-    criticality: "Criticite",
-    linkedCves: "CVEs liees",
-    attackScore: "Attack score",
-    actions: "Actions",
-    surfaceTitle: "Surface d'attaque",
-    surfaceDesc: "Visualisation exposition par asset",
-    noSurfaceTitle: "Pas de surface",
-    noSurfaceDesc: "Ajoutez des assets pour afficher la surface d'attaque.",
-    surfaceHint: "Plus la surface est grande, plus l'exposition CVE est elevee.",
-    cmdbTitle: "Integration CMDB",
-    cmdbDesc: "CSV + connecteur CMDB (ServiceNow, GLPI, interne)",
-    cmdbHint: "Format attendu: name,type,ip,hostname,description,criticality,status",
-    cmdbConnectorNote: "Utilisez Administration > Actions CMDB pour tester et synchroniser l'inventaire.",
-    add: "Ajouter",
+    criticality: "Criticité",
     status: "Statut",
-    ip: "IP",
+    ip: "IP / hostname",
+    vulns: "Vulnérabilités",
+    products: "Produits",
+    actions: "Actions",
+    add: "Ajouter",
+    save: "Enregistrer",
+    cancel: "Annuler",
+    deleteConfirmTitle: "Supprimer cet actif ?",
+    deleteConfirmDesc: "Cette action est irréversible. Les vulnérabilités liées seront détachées.",
+    delete: "Supprimer",
+    description2: "Description",
+    kpiTotal: "Total actifs",
+    kpiCritical: "Criticité critique",
+    kpiActive: "Actifs en service",
+    kpiVulns: "Avec vulnérabilités",
+    sortHint: "Cliquez sur l'en-tête pour trier",
   },
   en: {
     title: "Asset management",
-    description: "Server/application/container inventory with CVE mapping",
+    description: "Server/application/container inventory with vulnerability mapping",
     importCsv: "Import CSV",
     importing: "Importing...",
     newAsset: "New asset",
     createAsset: "Create asset",
+    editAsset: "Edit asset",
     createDesc: "Manual addition to SOC inventory",
+    editDesc: "Modify the selected asset's information",
     assetCreated: "Asset created",
+    assetUpdated: "Asset updated",
     assetDeleted: "Asset deleted",
     createError: "Unable to create asset.",
+    updateError: "Unable to update asset.",
     deleteError: "Unable to delete asset.",
     csvOk: "CSV import",
     csvFailed: "CSV import failed",
     csvFormat: "Check format: name,type,ip,hostname,description,criticality,status",
+    csvDownload: "CSV template",
     emptyCsv: "Empty CSV",
-    unavailableTitle: "Assets unavailable",
-    unavailableDesc: "Unable to load asset inventory.",
-    retry: "Retry",
-    inventoryTitle: "Asset inventory",
-    inventoryDesc: "CVE mapping by asset with exposure score",
+    inventoryTitle: "Inventory",
     noAssetTitle: "No asset",
     noAssetDesc: "Create an asset or import a CSV to start.",
+    noResultsTitle: "No results",
+    noResultsDesc: "Relax the filters to see more assets.",
+    surfaceTitle: "Attack surface",
+    surfaceDesc: "Cumulative exposure distribution by asset (linked vulnerabilities + criticality)",
+    surfaceHint: "Larger blocks represent more exposed assets.",
+    noSurfaceTitle: "No surface",
+    noSurfaceDesc: "Add assets and vulnerabilities to view the surface.",
+    filters: "Filters",
+    search: "Search (name, IP, hostname, description)",
+    all: "All",
     name: "Name",
     type: "Type",
     criticality: "Criticality",
-    linkedCves: "Linked CVEs",
-    attackScore: "Attack score",
-    actions: "Actions",
-    surfaceTitle: "Attack surface",
-    surfaceDesc: "Exposure visualization by asset",
-    noSurfaceTitle: "No surface",
-    noSurfaceDesc: "Add assets to display attack surface.",
-    surfaceHint: "Larger blocks represent higher cumulative CVE exposure.",
-    cmdbTitle: "CMDB integration",
-    cmdbDesc: "CSV + CMDB connector (ServiceNow, GLPI, internal)",
-    cmdbHint: "Expected format: name,type,ip,hostname,description,criticality,status",
-    cmdbConnectorNote: "Use Administration > CMDB actions to test and synchronize the inventory.",
-    add: "Add",
     status: "Status",
-    ip: "IP",
+    ip: "IP / hostname",
+    vulns: "Vulnerabilities",
+    products: "Products",
+    actions: "Actions",
+    add: "Add",
+    save: "Save",
+    cancel: "Cancel",
+    deleteConfirmTitle: "Delete this asset?",
+    deleteConfirmDesc: "This is irreversible. Linked vulnerabilities will be detached.",
+    delete: "Delete",
+    description2: "Description",
+    kpiTotal: "Total assets",
+    kpiCritical: "Critical criticality",
+    kpiActive: "Active",
+    kpiVulns: "With vulnerabilities",
+    sortHint: "Click a header to sort",
   },
 } as const;
+
+const criticalityColor = (c: string) => {
+  switch (c) {
+    case "critical":
+      return "bg-red-500/15 text-red-600 border-red-500/30";
+    case "high":
+      return "bg-orange-500/15 text-orange-600 border-orange-500/30";
+    case "medium":
+      return "bg-yellow-500/15 text-yellow-700 border-yellow-500/30";
+    case "low":
+      return "bg-emerald-500/15 text-emerald-700 border-emerald-500/30";
+    default:
+      return "";
+  }
+};
+
+const statusColor = (s: string) => {
+  switch (s) {
+    case "active":
+      return "bg-emerald-500/15 text-emerald-700 border-emerald-500/30";
+    case "inactive":
+      return "bg-slate-500/15 text-slate-600 border-slate-500/30";
+    case "retired":
+      return "bg-red-500/15 text-red-700 border-red-500/30";
+    default:
+      return "";
+  }
+};
 
 export default function AssetsPage() {
   const locale = useUiPreferencesStore((state) => state.locale);
   const t = copy[locale];
+
+  const [search, setSearch] = React.useState("");
+  const [criticalityFilter, setCriticalityFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [typeFilter, setTypeFilter] = React.useState("all");
+  const [sortBy, setSortBy] = React.useState("createdAt");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<AssetRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<AssetRow | null>(null);
   const [csvLoading, setCsvLoading] = React.useState(false);
 
-  const { data: assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets();
-  const { data: cves, isLoading: cvesLoading } = useCVEs();
+  // Debounce search to avoid hammering the API on every keystroke
+  const [debouncedSearch, setDebouncedSearch] = React.useState(search);
+  React.useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(handle);
+  }, [search]);
 
-  const cveRecords = React.useMemo(() => (cves ?? []).map(normalizeCve), [cves]);
+  const { data, isLoading, isError, refetch } = useAssetsPage({
+    search: debouncedSearch,
+    criticality: criticalityFilter,
+    status: statusFilter,
+    type: typeFilter,
+    sortBy,
+    sortDir,
+    pageSize: 200,
+  });
+
+  const assets = (data?.assets ?? []) as AssetRow[];
+  const stats = data?.stats;
+
+  // Distinct types for the type filter dropdown
+  const types = React.useMemo(() => {
+    const set = new Set<string>(assets.map((a) => a.type));
+    return Array.from(set).sort();
+  }, [assets]);
+
+  const treemapData = React.useMemo(
+    () =>
+      assets.map((asset) => {
+        const vulns = asset._count?.vulnerabilities ?? 0;
+        const critWeight = { critical: 4, high: 3, medium: 2, low: 1 }[asset.criticality] ?? 1;
+        return {
+          name: asset.name,
+          size: Math.max(1, vulns * 5 + critWeight),
+          criticality: asset.criticality,
+        };
+      }),
+    [assets]
+  );
 
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
@@ -166,75 +299,60 @@ export default function AssetsPage() {
     },
   });
 
-  const mappedAssets = React.useMemo(() => {
-    return (assets ?? []).map((asset) => {
-      const name = asset.name.toLowerCase();
-      const type = asset.type.toLowerCase();
-
-      const linked = cveRecords.filter((cve) => {
-        const source = `${cve.description} ${cve.product} ${cve.vendor}`.toLowerCase();
-        return source.includes(name) || source.includes(type);
+  React.useEffect(() => {
+    if (editing) {
+      form.reset({
+        name: editing.name,
+        type: editing.type,
+        ip: editing.ip ?? "",
+        hostname: editing.hostname ?? "",
+        description: editing.description ?? "",
+        criticality: editing.criticality as AssetFormValues["criticality"],
+        status: editing.status as AssetFormValues["status"],
       });
+      setDialogOpen(true);
+    }
+  }, [editing, form]);
 
-      const exposureScore = linked.reduce((sum, row) => sum + (row.cvssScore ?? 4), 0);
-
-      return {
-        ...asset,
-        linkedCves: linked,
-        linkedCount: linked.length,
-        exposureScore: Number(exposureScore.toFixed(1)),
-      };
-    });
-  }, [assets, cveRecords]);
-
-  const treemapData = React.useMemo(
-    () =>
-      mappedAssets.map((asset) => ({
-        name: asset.name,
-        size: Math.max(asset.exposureScore, 1),
-        criticality: asset.criticality,
-      })),
-    [mappedAssets]
-  );
-
-  const createAsset = form.handleSubmit(async (values) => {
+  const saveAsset = form.handleSubmit(async (values) => {
     try {
-      const response = await fetch("/api/assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) throw new Error("asset create failed");
-
-      toast({ title: t.assetCreated, description: `${values.name}` });
+      if (editing) {
+        await fetchJson(`/api/assets/${editing.id}`, {
+          method: "PUT",
+          body: JSON.stringify(values),
+        });
+        toast({ title: t.assetUpdated, description: values.name });
+      } else {
+        await fetchJson("/api/assets", {
+          method: "POST",
+          body: JSON.stringify(values),
+        });
+        toast({ title: t.assetCreated, description: values.name });
+      }
       form.reset();
+      setEditing(null);
       setDialogOpen(false);
-      await refetchAssets();
+      await refetch();
     } catch (error) {
-      console.error(error);
+      const message = error instanceof Error ? error.message : "";
       toast({
-        title: "Erreur",
-        description: t.createError,
+        title: editing ? t.updateError : t.createError,
+        description: message,
         variant: "destructive",
       });
     }
   });
 
-  const deleteAsset = async (id: string) => {
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const response = await fetch(`/api/assets/${id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("delete failed");
-
-      toast({ title: t.assetDeleted });
-      await refetchAssets();
+      await fetchJson(`/api/assets/${deleteTarget.id}`, { method: "DELETE" });
+      toast({ title: t.assetDeleted, description: deleteTarget.name });
+      setDeleteTarget(null);
+      await refetch();
     } catch (error) {
-      console.error(error);
-      toast({
-        title: "Erreur",
-        description: t.deleteError,
-        variant: "destructive",
-      });
+      const message = error instanceof Error ? error.message : "";
+      toast({ title: t.deleteError, description: message, variant: "destructive" });
     }
   };
 
@@ -246,49 +364,46 @@ export default function AssetsPage() {
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean);
-
       if (rows.length <= 1) throw new Error(t.emptyCsv);
 
       const [header, ...dataRows] = rows;
-      const columns = header.split(",").map((part) => part.trim().toLowerCase());
-
-      const payloads = dataRows.map((row) => {
-        const cells = row.split(",").map((cell) => cell.trim());
-        const entry: Record<string, string> = {};
-        columns.forEach((column, index) => {
-          entry[column] = cells[index] ?? "";
-        });
-
-        return {
-          name: entry.name,
-          type: entry.type || "server",
-          ip: entry.ip || null,
-          hostname: entry.hostname || null,
-          description: entry.description || null,
-          criticality: (entry.criticality || "medium") as AssetFormValues["criticality"],
-          status: (entry.status || "active") as AssetFormValues["status"],
-        };
-      });
-
+      const columns = header.split(",").map((c) => c.trim().toLowerCase());
       let imported = 0;
-
-      for (const payload of payloads) {
-        const response = await fetch("/api/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+      let errors = 0;
+      for (const row of dataRows) {
+        const cells = row.split(",").map((c) => c.trim());
+        const entry: Record<string, string> = {};
+        columns.forEach((col, i) => {
+          entry[col] = cells[i] ?? "";
         });
-
-        if (response.ok) imported += 1;
+        try {
+          await fetchJson("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              name: entry.name,
+              type: entry.type || "server",
+              ip: entry.ip || null,
+              hostname: entry.hostname || null,
+              description: entry.description || null,
+              criticality: (entry.criticality || "medium") as AssetFormValues["criticality"],
+              status: (entry.status || "active") as AssetFormValues["status"],
+            }),
+          });
+          imported++;
+        } catch {
+          errors++;
+        }
       }
-
-      toast({ title: t.csvOk, description: `${imported}/${payloads.length} assets` });
-      await refetchAssets();
+      toast({
+        title: t.csvOk,
+        description: `${imported} OK · ${errors} ${errors > 1 ? "errors" : "error"}`,
+      });
+      await refetch();
     } catch (error) {
-      console.error(error);
+      const message = error instanceof Error ? error.message : "";
       toast({
         title: t.csvFailed,
-        description: t.csvFormat,
+        description: message || t.csvFormat,
         variant: "destructive",
       });
     } finally {
@@ -296,7 +411,40 @@ export default function AssetsPage() {
     }
   };
 
-  if (assetsLoading || cvesLoading) {
+  const downloadCsvTemplate = () => {
+    const csv =
+      "name,type,ip,hostname,description,criticality,status\n" +
+      "web-prod-01,server,10.0.0.5,web1.local,Web frontend,high,active\n" +
+      "db-prod-01,database,10.0.0.6,db1.local,Primary PostgreSQL,critical,active\n";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "assets-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setCriticalityFilter("all");
+    setStatusFilter("all");
+    setTypeFilter("all");
+  };
+
+  const hasFilters =
+    debouncedSearch || criticalityFilter !== "all" || statusFilter !== "all" || typeFilter !== "all";
+
+  if (isLoading && !data) {
     return (
       <div className="p-6 lg:p-8">
         <LoadingGrid rows={8} />
@@ -304,16 +452,14 @@ export default function AssetsPage() {
     );
   }
 
-  if (assetsError) {
+  if (isError) {
     return (
       <div className="p-6 lg:p-8">
         <EmptyState
-          title={t.unavailableTitle}
-          description={t.unavailableDesc}
-          actionLabel={t.retry}
-          onAction={() => {
-            void refetchAssets();
-          }}
+          title="Assets indisponibles"
+          description="Impossible de charger l'inventaire."
+          actionLabel="Réessayer"
+          onAction={() => void refetch()}
         />
       </div>
     );
@@ -326,23 +472,35 @@ export default function AssetsPage() {
         description={t.description}
         actions={
           <>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <Button variant="outline" onClick={downloadCsvTemplate}>
+              <Database className="mr-2 h-4 w-4" /> {t.csvDownload}
+            </Button>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
               <FileUp className="h-4 w-4" />
               {csvLoading ? t.importing : t.importCsv}
               <input
                 type="file"
                 className="hidden"
                 accept=".csv,text/csv"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
                   if (file) {
                     void importCsv(file);
-                    event.target.value = "";
+                    e.target.value = "";
                   }
                 }}
               />
             </label>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) {
+                  setEditing(null);
+                  form.reset();
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" /> {t.newAsset}
@@ -350,12 +508,12 @@ export default function AssetsPage() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{t.createAsset}</DialogTitle>
-                  <DialogDescription>{t.createDesc}</DialogDescription>
+                  <DialogTitle>{editing ? t.editAsset : t.createAsset}</DialogTitle>
+                  <DialogDescription>{editing ? t.editDesc : t.createDesc}</DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                  <form onSubmit={createAsset} className="space-y-3">
+                  <form onSubmit={saveAsset} className="space-y-3">
                     <FormField
                       control={form.control}
                       name="name"
@@ -363,13 +521,12 @@ export default function AssetsPage() {
                         <FormItem>
                           <Label>{t.name}</Label>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} placeholder="web-prod-01" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-
                     <div className="grid gap-3 md:grid-cols-2">
                       <FormField
                         control={form.control}
@@ -378,7 +535,7 @@ export default function AssetsPage() {
                           <FormItem>
                             <Label>{t.type}</Label>
                             <FormControl>
-                              <Input {...field} />
+                              <Input {...field} placeholder="server / database / app..." />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -389,16 +546,41 @@ export default function AssetsPage() {
                         name="ip"
                         render={({ field }) => (
                           <FormItem>
-                            <Label>{t.ip}</Label>
+                            <Label>IP</Label>
                             <FormControl>
-                              <Input {...field} />
+                              <Input {...field} placeholder="10.0.0.5" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                     </div>
-
+                    <FormField
+                      control={form.control}
+                      name="hostname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>Hostname</Label>
+                          <FormControl>
+                            <Input {...field} placeholder="web1.local" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label>{t.description2}</Label>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     <div className="grid gap-3 md:grid-cols-2">
                       <FormField
                         control={form.control}
@@ -413,10 +595,11 @@ export default function AssetsPage() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="low">low</SelectItem>
-                                <SelectItem value="medium">medium</SelectItem>
-                                <SelectItem value="high">high</SelectItem>
-                                <SelectItem value="critical">critical</SelectItem>
+                                {CRITICALITIES.map((c) => (
+                                  <SelectItem key={c} value={c}>
+                                    {c}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -436,9 +619,11 @@ export default function AssetsPage() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="active">active</SelectItem>
-                                <SelectItem value="inactive">inactive</SelectItem>
-                                <SelectItem value="retired">retired</SelectItem>
+                                {STATUSES.map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {s}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -446,9 +631,8 @@ export default function AssetsPage() {
                         )}
                       />
                     </div>
-
                     <Button type="submit" className="w-full">
-                      {t.add}
+                      {editing ? t.save : t.add}
                     </Button>
                   </form>
                 </Form>
@@ -458,54 +642,181 @@ export default function AssetsPage() {
         }
       />
 
-      <section className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
+      {/* KPIs */}
+      <section className="grid gap-4 md:grid-cols-4">
+        <KpiCard
+          icon={<Database className="h-4 w-4" />}
+          label={t.kpiTotal}
+          value={stats?.total ?? assets.length}
+        />
+        <KpiCard
+          icon={<ShieldAlert className="h-4 w-4 text-red-500" />}
+          label={t.kpiCritical}
+          value={stats?.byCriticality?.critical ?? 0}
+          accent="text-red-600"
+        />
+        <KpiCard
+          icon={<Server className="h-4 w-4 text-emerald-500" />}
+          label={t.kpiActive}
+          value={stats?.byStatus?.active ?? 0}
+          accent="text-emerald-600"
+        />
+        <KpiCard
+          icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+          label={t.kpiVulns}
+          value={assets.filter((a) => (a._count?.vulnerabilities ?? 0) > 0).length}
+          accent="text-amber-600"
+        />
+      </section>
+
+      {/* Filters */}
+      <Card className="card-elevated">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">{t.filters}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder={t.search}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Select value={criticalityFilter} onValueChange={setCriticalityFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder={t.criticality} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {CRITICALITIES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder={t.status} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder={t.type} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.all}</SelectItem>
+              {types.map((tp) => (
+                <SelectItem key={tp} value={tp}>
+                  {tp}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={resetFilters}
+            disabled={!hasFilters}
+            title="Reset filters"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
+
+      <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
         <Card className="card-elevated">
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle>{t.inventoryTitle}</CardTitle>
-            <CardDescription>{t.inventoryDesc}</CardDescription>
+            <CardDescription>
+              {assets.length} / {stats?.total ?? assets.length} · {t.sortHint}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {mappedAssets.length === 0 ? (
-              <EmptyState title={t.noAssetTitle} description={t.noAssetDesc} />
+            {assets.length === 0 ? (
+              <EmptyState
+                title={hasFilters ? t.noResultsTitle : t.noAssetTitle}
+                description={hasFilters ? t.noResultsDesc : t.noAssetDesc}
+              />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.name}</TableHead>
-                    <TableHead>{t.type}</TableHead>
-                    <TableHead>{t.criticality}</TableHead>
-                    <TableHead>{t.linkedCves}</TableHead>
-                    <TableHead>{t.attackScore}</TableHead>
-                    <TableHead className="text-right">{t.actions}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mappedAssets.map((asset) => (
-                    <TableRow key={asset.id}>
-                      <TableCell className="font-medium">{asset.name}</TableCell>
-                      <TableCell>{asset.type}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{asset.criticality}</Badge>
-                      </TableCell>
-                      <TableCell>{asset.linkedCount}</TableCell>
-                      <TableCell>{asset.exposureScore}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => void deleteAsset(asset.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead label={t.name} sortKey="name" current={sortBy} dir={sortDir} onClick={toggleSort} />
+                      <SortableHead label={t.type} sortKey="type" current={sortBy} dir={sortDir} onClick={toggleSort} />
+                      <TableHead>{t.ip}</TableHead>
+                      <SortableHead label={t.criticality} sortKey="criticality" current={sortBy} dir={sortDir} onClick={toggleSort} />
+                      <SortableHead label={t.status} sortKey="status" current={sortBy} dir={sortDir} onClick={toggleSort} />
+                      <TableHead className="text-right">{t.vulns}</TableHead>
+                      <TableHead className="text-right">{t.actions}</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {assets.map((asset) => (
+                      <TableRow key={asset.id}>
+                        <TableCell className="font-medium">{asset.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{asset.type}</TableCell>
+                        <TableCell className="text-xs">
+                          {asset.ip && <div className="font-mono">{asset.ip}</div>}
+                          {asset.hostname && <div className="text-muted-foreground">{asset.hostname}</div>}
+                          {!asset.ip && !asset.hostname && <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={criticalityColor(asset.criticality)}>
+                            {asset.criticality}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={statusColor(asset.status)}>
+                            {asset.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {asset._count?.vulnerabilities ?? 0}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Edit"
+                              onClick={() => setEditing(asset)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Delete"
+                              onClick={() => setDeleteTarget(asset)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card className="card-elevated">
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle>{t.surfaceTitle}</CardTitle>
             <CardDescription>{t.surfaceDesc}</CardDescription>
           </CardHeader>
@@ -527,7 +838,6 @@ export default function AssetsPage() {
                 </ResponsiveContainer>
               </div>
             )}
-
             <div className="mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
               {t.surfaceHint}
             </div>
@@ -535,27 +845,90 @@ export default function AssetsPage() {
         </Card>
       </section>
 
-      <Card className="card-elevated">
-        <CardHeader>
-          <CardTitle>{t.cmdbTitle}</CardTitle>
-          <CardDescription>{t.cmdbDesc}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            {t.cmdbHint}: <code>name,type,ip,hostname,description,criticality,status</code>
-            <br />
-            {t.cmdbConnectorNote}
-          </div>
-        </CardContent>
-      </Card>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.deleteConfirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.deleteConfirmDesc}
+              {deleteTarget && (
+                <div className="mt-2 rounded border bg-muted/40 p-2 text-sm font-mono">
+                  {deleteTarget.name} ({deleteTarget.type})
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmDelete()}
+            >
+              {t.delete}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function CustomizedTreemap(props: any) {
-  const { x, y, width, height, name, value } = props;
-  const intensity = scaleLinear<string>().domain([0, 100]).range(["#38bdf8", "#1e293b"])(Number(value));
+function KpiCard({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  accent?: string;
+}) {
+  return (
+    <Card className="card-elevated">
+      <CardContent className="flex items-center justify-between py-5">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${accent ?? ""}`}>{value}</p>
+        </div>
+        <div className="rounded-full bg-muted p-2">{icon}</div>
+      </CardContent>
+    </Card>
+  );
+}
 
+function SortableHead({
+  label,
+  sortKey,
+  current,
+  dir,
+  onClick,
+}: {
+  label: string;
+  sortKey: string;
+  current: string;
+  dir: "asc" | "desc";
+  onClick: (k: string) => void;
+}) {
+  const isActive = current === sortKey;
+  return (
+    <TableHead className="cursor-pointer select-none" onClick={() => onClick(sortKey)}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive &&
+          (dir === "asc" ? (
+            <ArrowUpAZ className="h-3 w-3 opacity-70" />
+          ) : (
+            <ArrowDownAZ className="h-3 w-3 opacity-70" />
+          ))}
+      </span>
+    </TableHead>
+  );
+}
+
+function CustomizedTreemap(props: { x?: number; y?: number; width?: number; height?: number; name?: string; value?: number }) {
+  const { x = 0, y = 0, width = 0, height = 0, name = "", value = 0 } = props;
+  const intensity = scaleLinear<string>().domain([0, 50]).range(["#38bdf8", "#1e293b"])(Number(value));
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} style={{ fill: intensity, stroke: "var(--border)" }} />
@@ -567,4 +940,3 @@ function CustomizedTreemap(props: any) {
     </g>
   );
 }
-
