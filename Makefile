@@ -58,7 +58,7 @@ seed-status: ## Vérifie l'état du seed
 	curl http://localhost:3000/api/seed
 
 backup: ## Backup de la base de données
-	docker-compose exec app tar czf /tmp/backup.tar.gz db/
+	docker-compose exec app tar czf /tmp/backup.tar.gz backend/db/
 	docker-compose cp app:/tmp/backup.tar.gz ./backup-$(shell date +%Y%m%d-%H%M%S).tar.gz
 	docker-compose exec app rm /tmp/backup.tar.gz
 	@echo "Backup terminé"

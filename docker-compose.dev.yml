@@ -8,21 +8,24 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:6432/cve_tracker?schema=public
+      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:5432/cve_tracker
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - REPORTS_DIR=/app/data/reports
+    command: ["sh", "-c", "bun run db:generate && bun run dev"]
     volumes:
       - .:/app
       - node_modules:/app/node_modules
+      - reports-data-dev:/app/data/reports
     depends_on:
       postgres:
         condition: service_healthy
       pgbouncer:
         condition: service_healthy
       redis:
-        condition: service_healthy
+        condition: service_started
       elasticsearch:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     networks:
       - cve-tracker-network
@@ -62,10 +65,42 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "5432"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5432"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - cve-tracker-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cve-tracker-worker-dev
+    command: ["sh", "-c", "bun run db:generate && node backend/scripts/worker.js"]
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://cve_tracker:cve_tracker@pgbouncer:5432/cve_tracker
+      - REDIS_URL=redis://redis:6379
+      - WORKER_POLL_INTERVAL_MS=15000
+      - NVD_AUTO_SYNC_ENABLED=true
+      - NVD_FULL_SYNC_INTERVAL_MS=86400000
+      - NVD_DELTA_INTERVAL_MS=900000
+      - NVD_DELTA_LOOKBACK_HOURS=24
+      - NVD_PAGE_SIZE=200
+      - NVD_BOOT_MAX_RECORDS=500
+      - NVD_API_KEY=${NVD_API_KEY:-}
+      - REPORTS_DIR=/app/data/reports
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - reports-data-dev:/app/data/reports
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - cve-tracker-network
 
@@ -96,6 +131,7 @@ volumes:
   postgres-data-dev:
   redis-data-dev:
   elastic-data-dev:
+  reports-data-dev:
 
 networks:
   cve-tracker-network:

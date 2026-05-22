@@ -10,7 +10,8 @@ RUN apk add --no-cache libc6-compat
 RUN npm install -g bun
 
 # Copy package files
-COPY package.json bun.lockb* ./
+COPY package.json bun.lock* ./
+COPY backend/prisma ./backend/prisma
 
 # Install dependencies
 RUN bun install

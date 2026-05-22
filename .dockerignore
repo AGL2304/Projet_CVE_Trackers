@@ -5,7 +5,8 @@ yarn-error.log
 bun.lockb
 
 # Next.js
-.next/
+/.next/
+frontend/.next/
 out/
 build
 
@@ -51,7 +52,7 @@ Thumbs.db
 # Documentation
 README.md
 *.md
-docs/
+backend/docs/
 
 # Docker
 Dockerfile
@@ -69,14 +70,14 @@ server.log
 *.sqlite
 *.sqlite
 *.sqlite3
-db/*.db
-db/*.sqlite
+backend/db/*.db
+backend/db/*.sqlite
 
 # Temporary files
 tmp
 temp
 
 # Examples (keep for initial data)
-db/assets_initial.sqlite
-db/vulnerabilities_initial.sqlite
-db/initial_data.sql
+backend/db/assets_initial.sqlite
+backend/db/vulnerabilities_initial.sqlite
+backend/db/initial_data.sql
