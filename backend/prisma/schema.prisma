@@ -183,6 +183,10 @@ model Asset {
   description String?
   criticality String   @default("medium")
   status      String   @default("active")
+  // Discovered open ports / services from the scanner, including hosts with no
+  // CPE-identified product (phones, IoT, TVs). Array of
+  // { port, protocol, service, product, version, cpe, banner }.
+  services    Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -262,6 +266,13 @@ model AppSettings {
   cmdbLastSyncAt      DateTime?
   cmdbLastSyncStatus  String?
   cmdbLastSyncMessage String?
+  // ── Branding / report personnalisation (consommé par le générateur de rapports)
+  brandAppName        String?
+  brandLogoUrl        String?
+  brandPrimaryColor   String?
+  reportHeaderText    String?
+  reportFooterText    String?
+  reportShowToc       Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

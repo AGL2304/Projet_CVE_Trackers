@@ -15,6 +15,28 @@ const SYSTEM_ACTOR: ActorContext = {
   role: UserRole.VIEWER,
 };
 
+// Trusted upstream service (Network Scanner Pro, SIEM Léger) authenticated
+// solely via the X-Internal-Auth shared secret, with no x-user-* identity.
+// Granted the API role so service-to-service endpoints (e.g. /api/v2/sync/cpe)
+// accept it. Its id is a pseudo-actor — see audit.ts PSEUDO_ACTOR_IDS.
+const SERVICE_ACTOR: ActorContext = {
+  id: "service",
+  email: "service@local",
+  role: UserRole.API,
+};
+
+/**
+ * True only when the request carries an X-Internal-Auth header that matches
+ * the configured INTERNAL_API_SHARED_SECRET. Unlike isInternalHeaderAuthorized,
+ * this is strict in every environment: a missing/unset secret never matches.
+ */
+function internalSecretMatches(request: NextRequest): boolean {
+  const expected = process.env.INTERNAL_API_SHARED_SECRET;
+  if (!expected) return false;
+  const provided = request.headers.get("x-internal-auth");
+  return Boolean(provided) && provided === expected;
+}
+
 const IS_PROD = process.env.NODE_ENV === "production";
 
 /**
@@ -46,7 +68,12 @@ export async function getActor(request: NextRequest): Promise<ActorContext> {
     };
   }
 
-  // 2) Header-based identity (only with a trusted shared secret in prod)
+  // 2) Trusted service-to-service call: a valid X-Internal-Auth secret
+  //    authenticates an upstream service (Scanner, SIEM) as an API actor,
+  //    even when it carries no x-user-* identity headers.
+  const serviceAuthenticated = internalSecretMatches(request);
+
+  // 3) Header-based identity (only with a trusted shared secret in prod)
   if (!isInternalHeaderAuthorized(request)) {
     return SYSTEM_ACTOR;
   }
@@ -55,7 +82,10 @@ export async function getActor(request: NextRequest): Promise<ActorContext> {
   const email = request.headers.get("x-user-email");
 
   if (!userId && !email) {
-    return SYSTEM_ACTOR;
+    // No user identity supplied. If the request proved it came from a trusted
+    // service via the shared secret, treat it as the API service principal;
+    // otherwise it's anonymous.
+    return serviceAuthenticated ? SERVICE_ACTOR : SYSTEM_ACTOR;
   }
 
   const user = await db.user.findFirst({

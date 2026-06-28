@@ -88,6 +88,26 @@ type AssetRow = {
   createdAt: string;
   updatedAt: string;
   _count?: { vulnerabilities: number; productLinks: number; tagLinks: number };
+  productLinks?: {
+    product: {
+      id: string;
+      name: string;
+      vendor: string;
+      version: string | null;
+      cpe: string | null;
+    };
+  }[];
+  services?:
+    | {
+        port: number | null;
+        protocol: string | null;
+        service: string | null;
+        product: string | null;
+        version: string | null;
+        cpe: string | null;
+        banner?: string | null;
+      }[]
+    | null;
 };
 
 const copy = {
@@ -759,6 +779,7 @@ export default function AssetsPage() {
                       <TableHead>{t.ip}</TableHead>
                       <SortableHead label={t.criticality} sortKey="criticality" current={sortBy} dir={sortDir} onClick={toggleSort} />
                       <SortableHead label={t.status} sortKey="status" current={sortBy} dir={sortDir} onClick={toggleSort} />
+                      <TableHead>{t.products}</TableHead>
                       <TableHead className="text-right">{t.vulns}</TableHead>
                       <TableHead className="text-right">{t.actions}</TableHead>
                     </TableRow>
@@ -782,6 +803,13 @@ export default function AssetsPage() {
                           <Badge variant="outline" className={statusColor(asset.status)}>
                             {asset.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <ProductBadges
+                            links={asset.productLinks}
+                            total={asset._count?.productLinks ?? 0}
+                          />
+                          <PortChips services={asset.services} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {asset._count?.vulnerabilities ?? 0}
@@ -894,6 +922,78 @@ function KpiCard({
         <div className="rounded-full bg-muted p-2">{icon}</div>
       </CardContent>
     </Card>
+  );
+}
+
+function ProductBadges({
+  links,
+  total,
+}: {
+  links?: AssetRow["productLinks"];
+  total: number;
+}) {
+  const items = links ?? [];
+  if (items.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const shown = items.slice(0, 3);
+  const remaining = total - shown.length;
+  return (
+    <div className="flex max-w-[260px] flex-wrap gap-1">
+      {shown.map(({ product }) => {
+        const label = [product.name, product.version].filter(Boolean).join(" ");
+        const title = [product.vendor, product.name, product.version]
+          .filter(Boolean)
+          .join(" ");
+        return (
+          <Badge
+            key={product.id}
+            variant="outline"
+            className="max-w-[180px] truncate border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+            title={product.cpe ? `${title} · ${product.cpe}` : title}
+          >
+            {label}
+          </Badge>
+        );
+      })}
+      {remaining > 0 && (
+        <Badge variant="outline" className="text-muted-foreground">
+          +{remaining}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Compact list of discovered open ports for a host. Complements ProductBadges:
+ * ProductBadges shows CPE-identified software; PortChips shows every open port
+ * the scanner saw (including ports with no fingerprinted product).
+ */
+function PortChips({ services }: { services?: AssetRow["services"] }) {
+  const items = (services ?? []).filter((s) => s.port != null);
+  if (items.length === 0) return null;
+  const shown = items.slice(0, 10);
+  const remaining = items.length - shown.length;
+  return (
+    <div className="mt-1 flex max-w-[280px] flex-wrap gap-1">
+      {shown.map((s, i) => {
+        const title = [s.service, s.product, s.version].filter(Boolean).join(" ");
+        return (
+          <span
+            key={`${s.port}-${s.protocol}-${i}`}
+            className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-tight text-muted-foreground"
+            title={title || undefined}
+          >
+            {s.port}
+            {s.service ? `/${s.service}` : ""}
+          </span>
+        );
+      })}
+      {remaining > 0 && (
+        <span className="text-[10px] text-muted-foreground">+{remaining}</span>
+      )}
+    </div>
   );
 }
 

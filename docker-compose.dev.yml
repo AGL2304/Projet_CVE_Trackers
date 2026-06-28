@@ -12,6 +12,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - REPORTS_DIR=/app/data/reports
+      # Accepts X-Internal-Auth from Scanner/SIEM (matches their env)
+      - INTERNAL_API_SHARED_SECRET=dev-shared-secret-replace-in-prod
     command: ["sh", "-c", "bun run db:generate && bun run dev"]
     volumes:
       - .:/app
@@ -36,10 +38,18 @@ services:
       - POSTGRES_DB=cve_tracker
       - POSTGRES_USER=cve_tracker
       - POSTGRES_PASSWORD=cve_tracker
+      # Used by the init-databases script (only on FIRST boot of the volume)
+      - SCANNER_DB=network_scanner
+      - SCANNER_USER=scanner
+      - SCANNER_PASSWORD=scanner
+      - SIEM_DB=siem
+      - SIEM_USER=siem
+      - SIEM_PASSWORD=siem
     ports:
       - "5433:5432"
     volumes:
       - postgres-data-dev:/var/lib/postgresql/data
+      - ./backend/infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cve_tracker -d cve_tracker"]
       interval: 10s
@@ -123,6 +133,83 @@ services:
       - "9200:9200"
     volumes:
       - elastic-data-dev:/usr/share/elasticsearch/data
+    networks:
+      - cve-tracker-network
+
+  # ─── Network Scanner Pro ────────────────────────────────────────────────
+  scanner:
+    build:
+      context: ../NetworkScannerPro
+      dockerfile: Dockerfile
+    container_name: scanner-dev
+    ports:
+      - "8001:8001"
+    environment:
+      - SCANNER_ENVIRONMENT=development
+      - SCANNER_LOG_LEVEL=INFO
+      # Real engine only — never inject synthetic demo hosts. From inside this
+      # container the LAN is unreachable, so a scan returns 0 hosts (empty)
+      # rather than fake data; run scripts/real_scan.py host-side for real LAN
+      # discovery. Set to 'fake' only for offline tests.
+      - SCANNER_SCAN_ENGINE=real
+      # Docker Desktop bridge: the container can't reach the physical LAN, so
+      # delegate real scans to a host-side agent (scripts/scan_agent.py) that
+      # can. Without this the web UI would report 0 hosts. Run the agent on the
+      # host and leave it running: `python scripts/scan_agent.py`.
+      - SCANNER_SCAN_HOST_AGENT_URL=http://host.docker.internal:8009
+      - SCANNER_SCAN_HOST_AGENT_TOKEN=dev-agent-secret
+      # Scans planifiés automatiques. Le scheduler in-process relance un scan des
+      # cibles toutes les N minutes (délégué à l'agent hôte, qui choisit nmap si
+      # présent). Chaque exécution apparaît dans l'historique /scans comme un scan
+      # manuel. Mettre SCANNER_SCHEDULE_ENABLED=false pour ne scanner qu'à la demande.
+      - SCANNER_SCHEDULE_ENABLED=true
+      - SCANNER_SCHEDULE_TARGETS=192.168.1.0/24
+      - SCANNER_SCHEDULE_PROFILE=quick
+      - SCANNER_SCHEDULE_INTERVAL_MINUTES=360
+      - SCANNER_SCHEDULE_INITIAL_DELAY_SECONDS=30
+      # No API token in dev — auth is bypassed when SCANNER_API_TOKEN is unset
+      - SCANNER_DB_URL=postgresql+asyncpg://scanner:scanner@postgres:5432/network_scanner
+      - SCANNER_REDIS_URL=redis://redis:6379/2
+      - SCANNER_CVE_TRACKER_URL=http://app:3000
+      # Shared secret allows scanner -> CVE Tracker calls without admin cookie
+      - SCANNER_CVE_TRACKER_SHARED_SECRET=dev-shared-secret-replace-in-prod
+      # Allowlist permissive en dev — couvre les RFC1918 et la loopback
+      - SCANNER_ALLOWLIST_CIDRS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8
+    extra_hosts:
+      # Make host.docker.internal resolve to the host on all platforms.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - cve-tracker-network
+
+  # ─── SIEM Léger ─────────────────────────────────────────────────────────
+  siem:
+    build:
+      context: ../SiemLeger
+      dockerfile: Dockerfile
+    container_name: siem-dev
+    ports:
+      - "8002:8002"
+    environment:
+      - SIEM_ENVIRONMENT=development
+      - SIEM_LOG_LEVEL=INFO
+      - SIEM_DB_URL=postgresql+asyncpg://siem:siem@postgres:5432/siem
+      - SIEM_ELASTICSEARCH_URL=http://elasticsearch:9200
+      - SIEM_CVE_TRACKER_URL=http://app:3000
+      - SIEM_CVE_TRACKER_SHARED_SECRET=dev-shared-secret-replace-in-prod
+      - SIEM_RULES_DIR=/app/rules/preloaded
+      - SIEM_RULE_EVAL_INTERVAL_S=15
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - cve-tracker-network
 

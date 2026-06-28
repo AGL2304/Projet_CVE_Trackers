@@ -17,7 +17,7 @@ interface AuditInput {
 // These are produced by getActor() when the request comes from the admin
 // session cookie or no session at all. We must NOT pass them as a foreign
 // key — the AuditLog.userId column references User.id.
-const PSEUDO_ACTOR_IDS = new Set<string>(["admin-session", "system"]);
+const PSEUDO_ACTOR_IDS = new Set<string>(["admin-session", "system", "service"]);
 
 export async function writeAuditLog(input: AuditInput) {
   const ipHeader = input.request?.headers.get("x-forwarded-for");

@@ -80,6 +80,16 @@ export async function GET(request: NextRequest) {
         take: pageSize,
         include: {
           _count: { select: { vulnerabilities: true, productLinks: true, tagLinks: true } },
+          // Surface the discovered software so the inventory UI can show what a
+          // scan actually found (e.g. redis 7.4.8, apache 2.4.58) instead of a
+          // bare host row. Capped to keep the list payload small.
+          productLinks: {
+            take: 12,
+            orderBy: { createdAt: "asc" },
+            include: {
+              product: { select: { id: true, name: true, vendor: true, version: true, cpe: true } },
+            },
+          },
         },
       }),
       db.asset.count({ where }),

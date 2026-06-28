@@ -10,8 +10,8 @@ import {
   LayoutDashboard,
   Server,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -30,9 +30,7 @@ export function Sidebar() {
   return (
     <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground xl:flex xl:flex-col">
       <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-        </div>
+        <BrandMark className="h-9 w-9 shrink-0 drop-shadow-sm" />
         <div className="space-y-0.5">
           <p className="font-semibold leading-none">{t("appName")}</p>
           <p className="text-xs text-sidebar-foreground/70">{t("controlPlane")}</p>
@@ -48,13 +46,19 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:focus-ring",
+                "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm transition-colors focus-visible:focus-ring",
                 active
                   ? "bg-sidebar-primary/15 text-sidebar-primary"
                   : "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
               aria-current={active ? "page" : undefined}
             >
+              {active ? (
+                <span
+                  className="grad-accent absolute inset-y-1 left-0 w-1 rounded-full"
+                  aria-hidden="true"
+                />
+              ) : null}
               <item.icon className="h-4 w-4" aria-hidden="true" />
               <span>{t(item.key)}</span>
             </Link>

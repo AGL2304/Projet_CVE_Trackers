@@ -38,7 +38,12 @@ const STATUSES = ["NEW", "ANALYZING", "CONFIRMED", "REMEDIATED", "FALSE_POSITIVE
 const SOURCES = ["NVD", "MITRE", "OSV", "CISA_KEV", "MANUAL"] as const;
 const FORMATS = ["PDF", "CSV", "JSON"] as const;
 
+const SCOPES = ["cve", "assets"] as const;
+const ASSET_CRITICALITIES = ["all", "low", "medium", "high", "critical"] as const;
+const ASSET_STATUSES = ["all", "active", "inactive", "retired"] as const;
+
 type GenerateValues = {
+  scope: (typeof SCOPES)[number];
   format: (typeof FORMATS)[number];
   title: string;
   severity: (typeof SEVERITIES)[number][];
@@ -50,6 +55,8 @@ type GenerateValues = {
   maxCvss: string;
   search: string;
   limit: string;
+  assetCriticality: (typeof ASSET_CRITICALITIES)[number];
+  assetStatus: (typeof ASSET_STATUSES)[number];
 };
 
 type ReportListItem = {
@@ -81,7 +88,17 @@ const copy = {
     presetCritical7d: "Critiques + élevées (7 j)",
     presetNew: "CVE nouvellement importées",
     presetFull: "Rapport complet (tout)",
+    presetAssets: "Inventaire des actifs scannés",
     builder: "Constructeur",
+    scope: "Type de rapport",
+    scopeCve: "Base CVE",
+    scopeAssets: "Actifs scannés",
+    scopeHint: "« Actifs scannés » liste les hôtes découverts et leurs produits/services détectés.",
+    assetCriticality: "Criticité",
+    assetStatus: "Statut de l'actif",
+    assetSearch: "Recherche (nom, IP, hostname)",
+    assetNote:
+      "Ce rapport listera tous les actifs de l'inventaire avec leurs services détectés (CPE) et le nombre de vulnérabilités liées. Les filtres CVE ci-dessous ne s'appliquent pas.",
     format: "Format",
     formatHint: "PDF → HTML imprimable (Ctrl+P pour PDF). CSV pour Excel. JSON pour l'API.",
     titleField: "Titre du rapport",
@@ -123,7 +140,17 @@ const copy = {
     presetCritical7d: "Critical + high (7 d)",
     presetNew: "Newly imported CVEs",
     presetFull: "Full report (everything)",
+    presetAssets: "Scanned-asset inventory",
     builder: "Builder",
+    scope: "Report type",
+    scopeCve: "CVE database",
+    scopeAssets: "Scanned assets",
+    scopeHint: "\"Scanned assets\" lists discovered hosts and their detected products/services.",
+    assetCriticality: "Criticality",
+    assetStatus: "Asset status",
+    assetSearch: "Search (name, IP, hostname)",
+    assetNote:
+      "This report lists every inventory asset with its detected services (CPE) and linked vulnerability count. The CVE filters below do not apply.",
     format: "Format",
     formatHint: "PDF → printable HTML (Ctrl+P to PDF). CSV for Excel. JSON for the API.",
     titleField: "Report title",
@@ -182,6 +209,13 @@ function statusColor(status: string) {
 function summarizeFilter(filter: Record<string, unknown> | null): string {
   if (!filter || Object.keys(filter).length === 0) return "—";
   const parts: string[] = [];
+  if (filter.scope === "assets") {
+    parts.push("scope:actifs");
+    if (filter.criticality) parts.push(`crit:${String(filter.criticality)}`);
+    if (filter.assetStatus) parts.push(`statut:${String(filter.assetStatus)}`);
+    if (filter.search) parts.push(`q:"${String(filter.search).slice(0, 30)}"`);
+    return parts.join(" · ");
+  }
   if (Array.isArray(filter.severity) && filter.severity.length > 0)
     parts.push(`sev:${(filter.severity as string[]).join("|")}`);
   if (Array.isArray(filter.status) && filter.status.length > 0)
@@ -203,6 +237,7 @@ export default function ReportsPage() {
 
   const form = useForm<GenerateValues>({
     defaultValues: {
+      scope: "cve",
       format: "PDF",
       title: "",
       severity: [],
@@ -214,8 +249,12 @@ export default function ReportsPage() {
       maxCvss: "",
       search: "",
       limit: "10000",
+      assetCriticality: "all",
+      assetStatus: "all",
     },
   });
+
+  const scope = form.watch("scope");
 
   const refreshReports = React.useCallback(async () => {
     try {
@@ -241,25 +280,41 @@ export default function ReportsPage() {
   const generate = form.handleSubmit(async (values) => {
     setGenerating(true);
     try {
-      const minCvss = values.minCvss === "" ? undefined : Number(values.minCvss);
-      const maxCvss = values.maxCvss === "" ? undefined : Number(values.maxCvss);
       const limit = values.limit === "" ? 10000 : Math.min(50_000, Math.max(1, Number(values.limit) || 10000));
 
-      const payload: Record<string, unknown> = {
-        format: values.format,
-        filter: {
-          ...(values.title ? { title: values.title } : {}),
-          ...(values.severity.length > 0 ? { severity: values.severity } : {}),
-          ...(values.status.length > 0 ? { status: values.status } : {}),
-          ...(values.source.length > 0 ? { source: values.source } : {}),
-          ...(values.dateFrom ? { dateFrom: new Date(values.dateFrom).toISOString() } : {}),
-          ...(values.dateTo ? { dateTo: new Date(values.dateTo).toISOString() } : {}),
-          ...(typeof minCvss === "number" && !Number.isNaN(minCvss) ? { minCvss } : {}),
-          ...(typeof maxCvss === "number" && !Number.isNaN(maxCvss) ? { maxCvss } : {}),
-          ...(values.search ? { search: values.search } : {}),
-          limit,
-        },
-      };
+      let payload: Record<string, unknown>;
+      if (values.scope === "assets") {
+        // Asset-inventory report: CVE filters do not apply.
+        payload = {
+          format: values.format,
+          filter: {
+            scope: "assets",
+            ...(values.title ? { title: values.title } : {}),
+            ...(values.search ? { search: values.search } : {}),
+            ...(values.assetCriticality !== "all" ? { criticality: values.assetCriticality } : {}),
+            ...(values.assetStatus !== "all" ? { assetStatus: values.assetStatus } : {}),
+            limit,
+          },
+        };
+      } else {
+        const minCvss = values.minCvss === "" ? undefined : Number(values.minCvss);
+        const maxCvss = values.maxCvss === "" ? undefined : Number(values.maxCvss);
+        payload = {
+          format: values.format,
+          filter: {
+            ...(values.title ? { title: values.title } : {}),
+            ...(values.severity.length > 0 ? { severity: values.severity } : {}),
+            ...(values.status.length > 0 ? { status: values.status } : {}),
+            ...(values.source.length > 0 ? { source: values.source } : {}),
+            ...(values.dateFrom ? { dateFrom: new Date(values.dateFrom).toISOString() } : {}),
+            ...(values.dateTo ? { dateTo: new Date(values.dateTo).toISOString() } : {}),
+            ...(typeof minCvss === "number" && !Number.isNaN(minCvss) ? { minCvss } : {}),
+            ...(typeof maxCvss === "number" && !Number.isNaN(maxCvss) ? { maxCvss } : {}),
+            ...(values.search ? { search: values.search } : {}),
+            limit,
+          },
+        };
+      }
 
       await fetchJson("/api/v2/reports/generate", {
         method: "POST",
@@ -275,13 +330,14 @@ export default function ReportsPage() {
     }
   });
 
-  const applyPreset = (preset: "critical" | "critical7d" | "new" | "full") => {
+  const applyPreset = (preset: "critical" | "critical7d" | "new" | "full" | "assets") => {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
 
     const base = {
+      scope: "cve" as GenerateValues["scope"],
       format: form.getValues("format"),
       severity: [] as GenerateValues["severity"],
       status: [] as GenerateValues["status"],
@@ -291,6 +347,8 @@ export default function ReportsPage() {
       minCvss: "",
       maxCvss: "",
       search: "",
+      assetCriticality: "all" as GenerateValues["assetCriticality"],
+      assetStatus: "all" as GenerateValues["assetStatus"],
     };
     if (preset === "critical") {
       form.reset({ ...base, title: "CVE critiques", severity: ["CRITICAL"], limit: "10000" });
@@ -304,6 +362,13 @@ export default function ReportsPage() {
       });
     } else if (preset === "new") {
       form.reset({ ...base, title: "CVE nouvellement importées", status: ["NEW"], limit: "10000" });
+    } else if (preset === "assets") {
+      form.reset({
+        ...base,
+        scope: "assets",
+        title: "Inventaire des actifs scannés",
+        limit: "10000",
+      });
     } else {
       form.reset({ ...base, title: "Rapport CVE complet", limit: "50000" });
     }
@@ -334,6 +399,9 @@ export default function ReportsPage() {
             <Button variant="outline" size="sm" onClick={() => applyPreset("full")}>
               {t.presetFull}
             </Button>
+            <Button variant="default" size="sm" onClick={() => applyPreset("assets")}>
+              {t.presetAssets}
+            </Button>
           </CardContent>
         </Card>
       </section>
@@ -347,6 +415,26 @@ export default function ReportsPage() {
           <CardContent>
             <form className="space-y-4" onSubmit={generate}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="space-y-1">
+                  <Label>{t.scope}</Label>
+                  <Controller
+                    control={form.control}
+                    name="scope"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cve">{t.scopeCve}</SelectItem>
+                          <SelectItem value="assets">{t.scopeAssets}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">{t.scopeHint}</p>
+                </div>
+
                 <div className="space-y-1">
                   <Label>{t.format}</Label>
                   <Controller
@@ -373,70 +461,127 @@ export default function ReportsPage() {
                   <p className="text-xs text-muted-foreground">{t.formatHint}</p>
                 </div>
 
-                <div className="space-y-1 md:col-span-2">
+                <div className="space-y-1">
                   <Label>{t.titleField}</Label>
-                  <Input {...form.register("title")} placeholder="Rapport CVE..." />
+                  <Input {...form.register("title")} placeholder="Rapport..." />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <MultiCheckGroup
-                  label={t.severity}
-                  options={[...SEVERITIES]}
-                  value={form.watch("severity") ?? []}
-                  onChange={(v) => form.setValue("severity", v as GenerateValues["severity"])}
-                />
-                <MultiCheckGroup
-                  label={t.status}
-                  options={[...STATUSES]}
-                  value={form.watch("status") ?? []}
-                  onChange={(v) => form.setValue("status", v as GenerateValues["status"])}
-                />
-                <MultiCheckGroup
-                  label={t.source}
-                  options={[...SOURCES]}
-                  value={form.watch("source") ?? []}
-                  onChange={(v) => form.setValue("source", v as GenerateValues["source"])}
-                />
-              </div>
+              {scope === "cve" ? (
+                <>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <MultiCheckGroup
+                      label={t.severity}
+                      options={[...SEVERITIES]}
+                      value={form.watch("severity") ?? []}
+                      onChange={(v) => form.setValue("severity", v as GenerateValues["severity"])}
+                    />
+                    <MultiCheckGroup
+                      label={t.status}
+                      options={[...STATUSES]}
+                      value={form.watch("status") ?? []}
+                      onChange={(v) => form.setValue("status", v as GenerateValues["status"])}
+                    />
+                    <MultiCheckGroup
+                      label={t.source}
+                      options={[...SOURCES]}
+                      value={form.watch("source") ?? []}
+                      onChange={(v) => form.setValue("source", v as GenerateValues["source"])}
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <div className="space-y-1">
-                  <Label>{t.dateFrom}</Label>
-                  <Input type="date" {...form.register("dateFrom")} />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t.dateTo}</Label>
-                  <Input type="date" {...form.register("dateTo")} />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t.minCvss}</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    {...form.register("minCvss")}
-                    placeholder="0.0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t.maxCvss}</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={10}
-                    {...form.register("maxCvss")}
-                    placeholder="10.0"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="space-y-1">
+                      <Label>{t.dateFrom}</Label>
+                      <Input type="date" {...form.register("dateFrom")} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t.dateTo}</Label>
+                      <Input type="date" {...form.register("dateTo")} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t.minCvss}</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        max={10}
+                        {...form.register("minCvss")}
+                        placeholder="0.0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t.maxCvss}</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        max={10}
+                        {...form.register("maxCvss")}
+                        placeholder="10.0"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
+                    {t.assetNote}
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label>{t.assetCriticality}</Label>
+                      <Controller
+                        control={form.control}
+                        name="assetCriticality"
+                        render={({ field }) => (
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ASSET_CRITICALITIES.map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {c === "all" ? "— (tous)" : c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t.assetStatus}</Label>
+                      <Controller
+                        control={form.control}
+                        name="assetStatus"
+                        render={({ field }) => (
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ASSET_STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s === "all" ? "— (tous)" : s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_1fr]">
                 <div className="space-y-1">
-                  <Label>{t.search}</Label>
-                  <Input {...form.register("search")} placeholder="apache, log4j, ssrf..." />
+                  <Label>{scope === "assets" ? t.assetSearch : t.search}</Label>
+                  <Input
+                    {...form.register("search")}
+                    placeholder={scope === "assets" ? "AGL23, 192.168.1.207..." : "apache, log4j, ssrf..."}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>{t.limit}</Label>

@@ -14,6 +14,7 @@ import {
   SunMedium,
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import {
   CommandDialog,
@@ -148,7 +149,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar text-sidebar-foreground">
                 <SheetHeader>
-                  <SheetTitle className="text-sidebar-foreground">{t("appName")}</SheetTitle>
+                  <SheetTitle className="flex items-center gap-3 text-sidebar-foreground">
+                    <BrandMark className="h-8 w-8 shrink-0 drop-shadow-sm" />
+                    {t("appName")}
+                  </SheetTitle>
                 </SheetHeader>
                 <div className="mt-6 space-y-2">
                   {quickLinks.map((link) => (

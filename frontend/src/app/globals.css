@@ -109,6 +109,12 @@
   --shadow-soft: 0 1px 2px 0 color-mix(in oklch, var(--foreground) 12%, transparent);
   --shadow-md: 0 8px 20px -12px color-mix(in oklch, var(--primary) 45%, transparent);
   --shadow-glow: 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent), 0 10px 30px -15px color-mix(in oklch, var(--accent) 40%, transparent);
+
+  /* Charte graphique — gradients de marque (4 directions) */
+  --grad-severity: linear-gradient(90deg, #3DDC84 0%, #FFD166 50%, #E63946 100%);
+  --grad-warm: linear-gradient(100deg, #FFD166 0%, #FB8B24 52%, #E63946 100%);
+  --grad-proactive: linear-gradient(155deg, #0B1220 0%, #3DDC84 58%, #4DA8FF 100%);
+  --grad-accent: linear-gradient(90deg, #4DA8FF 0%, #E63946 100%);
 }
 
 .dark {
@@ -224,5 +230,60 @@
 
   .focus-ring {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Charte graphique — surfaces & accents dégradés */
+  .grad-severity {
+    background: var(--grad-severity);
+  }
+
+  .grad-warm {
+    background: var(--grad-warm);
+  }
+
+  .grad-proactive {
+    background: var(--grad-proactive);
+  }
+
+  .grad-accent {
+    background: var(--grad-accent);
+  }
+
+  /* Dir 1 — filet "Rampe de Sévérité" sous les titres de page */
+  .accent-rule {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--grad-severity);
+  }
+
+  /* Dir 2 — texte "Danger Graduel" pour les valeurs critiques */
+  .text-grad-warm {
+    background: var(--grad-warm);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Dir 3 — liseré "Sécurité Proactive" en tête de carte */
+  .proactive-top {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .proactive-top::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--grad-proactive);
+    opacity: 0.95;
+  }
+
+  /* Dir 4 — accent bleu→rouge */
+  .accent-rule-4 {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--grad-accent);
   }
 }

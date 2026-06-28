@@ -22,6 +22,11 @@ export const metadata: Metadata = {
     "Plateforme SOC pour le suivi des CVEs, la gestion des actifs et le reporting cybersecurity.",
   keywords: ["CVE", "CVSS", "SOC", "cybersecurity", "vulnerability management"],
   authors: [{ name: "CVE Tracker Team" }],
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
+  },
   other: {
     google: "notranslate",
   },

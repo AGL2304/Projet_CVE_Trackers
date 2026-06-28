@@ -81,23 +81,27 @@ function normalizeThemePreference(value: unknown): ThemePreference {
 }
 
 function useUiPreferencesHydration() {
-  const [hydrated, setHydrated] = React.useState(() =>
-    useUiPreferencesStore.persist.hasHydrated()
+  // On the server, `createJSONStorage(() => localStorage)` throws (no
+  // localStorage), so zustand's persist middleware skips attaching the
+  // `.persist` API. Guard every access so SSR renders the un-hydrated
+  // default state instead of crashing; the client bundle has `.persist`
+  // and performs the real rehydration in the effect below.
+  const [hydrated, setHydrated] = React.useState(
+    () => useUiPreferencesStore.persist?.hasHydrated() ?? false
   );
 
   React.useEffect(() => {
-    const unsubscribeHydrate = useUiPreferencesStore.persist.onHydrate(() =>
-      setHydrated(false)
-    );
-    const unsubscribeFinish = useUiPreferencesStore.persist.onFinishHydration(() =>
-      setHydrated(true)
-    );
+    const persistApi = useUiPreferencesStore.persist;
+    if (!persistApi) return;
+
+    const unsubscribeHydrate = persistApi.onHydrate(() => setHydrated(false));
+    const unsubscribeFinish = persistApi.onFinishHydration(() => setHydrated(true));
 
     if (!uiPreferencesHydrationRequested) {
       uiPreferencesHydrationRequested = true;
-      void useUiPreferencesStore.persist.rehydrate();
+      void persistApi.rehydrate();
     } else {
-      setHydrated(useUiPreferencesStore.persist.hasHydrated());
+      setHydrated(persistApi.hasHydrated());
     }
 
     return () => {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { publishEvent } from "@/lib/webhooks";
 
 const SEVERITIES = ["critical", "high", "medium", "low"] as const;
 const STATUSES = ["open", "in_progress", "resolved", "ignored"] as const;
@@ -94,6 +95,19 @@ export async function PUT(
         asset: { select: { id: true, name: true, type: true } },
       },
     });
+
+    // Fire a webhook on resolved transition so the SIEM can mark the
+    // corresponding alerts as remediated.
+    if (data.status === "resolved" && existing.status !== "resolved") {
+      publishEvent("vulnerability.resolved", {
+        vulnerabilityId: vulnerability.id,
+        title: vulnerability.title,
+        severity: vulnerability.severity,
+        cveId: vulnerability.cveId,
+        assetId: vulnerability.assetId,
+        resolvedAt: vulnerability.resolvedAt,
+      });
+    }
 
     return NextResponse.json(vulnerability);
   } catch (error) {

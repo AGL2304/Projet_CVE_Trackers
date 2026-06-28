@@ -58,6 +58,13 @@ const dataSourceSchema = z.object({
   cmdbApiToken: z.string().optional(),
   webhookUrl: z.string().url("Invalid URL").or(z.literal("")),
   cmdbEnabled: z.boolean(),
+  // Branding / report personnalisation
+  brandAppName: z.string().optional(),
+  brandLogoUrl: z.string().url("Invalid URL").or(z.literal("")),
+  brandPrimaryColor: z.string().optional(),
+  reportHeaderText: z.string().optional(),
+  reportFooterText: z.string().optional(),
+  reportShowToc: z.boolean(),
 });
 
 type AdminLoginValues = z.infer<typeof adminLoginSchema>;
@@ -123,6 +130,12 @@ type AppSettingsPayload = {
   cmdbLastSyncAt: string | null;
   cmdbLastSyncStatus: string | null;
   cmdbLastSyncMessage: string | null;
+  brandAppName: string;
+  brandLogoUrl: string;
+  brandPrimaryColor: string;
+  reportHeaderText: string;
+  reportFooterText: string;
+  reportShowToc: boolean;
 };
 
 const rbacMatrix = [
@@ -171,11 +184,19 @@ const copy = {
     lastSyncPrefix: "Derniere sync",
     alertsTitle: "Notifications et alertes",
     alertsDesc: "Canaux et triggers",
-    brandingTitle: "Branding",
-    brandingDesc: "Personnalisation logo et charte",
+    brandingTitle: "Branding & rapports",
+    brandingDesc: "Logo, charte et personnalisation des rapports PDF",
     appName: "Nom application",
     logoUrl: "Logo URL",
     primaryColor: "Couleur principale",
+    reportHeaderText: "En-tete du rapport",
+    reportHeaderPlaceholder: "ex. Confidentiel - Direction de la securite",
+    reportFooterText: "Pied de page du rapport",
+    reportFooterPlaceholder: "ex. (c) 2026 ACME Corp - Diffusion restreinte",
+    reportToc: "Sommaire (table des matieres)",
+    reportTocDesc: "Ajoute un sommaire cliquable en tete du rapport PDF.",
+    saveBranding: "Sauvegarder le branding",
+    brandingHint: "Ces reglages s'appliquent aux rapports generes (en-tete, pied de page, sommaire).",
     criticalEmail: "Alerte email CVE critique",
     digest: "Digest quotidien",
     slack: "Webhook Slack",
@@ -253,11 +274,19 @@ const copy = {
     lastSyncPrefix: "Last sync",
     alertsTitle: "Notifications and alerts",
     alertsDesc: "Channels and triggers",
-    brandingTitle: "Branding",
-    brandingDesc: "Logo and style customization",
+    brandingTitle: "Branding & reports",
+    brandingDesc: "Logo, palette and PDF report customization",
     appName: "Application name",
     logoUrl: "Logo URL",
     primaryColor: "Primary color",
+    reportHeaderText: "Report header",
+    reportHeaderPlaceholder: "e.g. Confidential - Security Office",
+    reportFooterText: "Report footer",
+    reportFooterPlaceholder: "e.g. (c) 2026 ACME Corp - Restricted",
+    reportToc: "Table of contents",
+    reportTocDesc: "Adds a clickable table of contents at the top of the PDF report.",
+    saveBranding: "Save branding",
+    brandingHint: "These settings apply to generated reports (header, footer, table of contents).",
     criticalEmail: "Critical CVE email alert",
     digest: "Daily digest",
     slack: "Slack webhook",
@@ -314,11 +343,6 @@ export default function SettingsPage() {
     digest: true,
     slack: false,
   });
-  const [branding, setBranding] = React.useState({
-    appName: "CVE Tracker",
-    logoUrl: "/logo.svg",
-    primary: "#0ea5e9",
-  });
 
   const [sessionChecked, setSessionChecked] = React.useState(false);
   const [authenticated, setAuthenticated] = React.useState(false);
@@ -349,6 +373,12 @@ export default function SettingsPage() {
       cmdbApiToken: "",
       webhookUrl: "",
       cmdbEnabled: false,
+      brandAppName: "CVE Tracker",
+      brandLogoUrl: "",
+      brandPrimaryColor: "#2C7BE5",
+      reportHeaderText: "",
+      reportFooterText: "",
+      reportShowToc: true,
     },
   });
 
@@ -369,6 +399,12 @@ export default function SettingsPage() {
       cmdbApiToken: settings.cmdbApiToken,
       webhookUrl: settings.webhookUrl,
       cmdbEnabled: settings.cmdbEnabled,
+      brandAppName: settings.brandAppName,
+      brandLogoUrl: settings.brandLogoUrl,
+      brandPrimaryColor: settings.brandPrimaryColor || "#2C7BE5",
+      reportHeaderText: settings.reportHeaderText,
+      reportFooterText: settings.reportFooterText,
+      reportShowToc: settings.reportShowToc,
     });
     setLocale(settings.language);
     setLastSyncInfo({
@@ -1108,32 +1144,51 @@ export default function SettingsPage() {
           <CardContent className="grid gap-3">
             <div className="space-y-1">
               <Label>{t.appName}</Label>
-              <Input
-                value={branding.appName}
-                onChange={(event) =>
-                  setBranding((state) => ({ ...state, appName: event.target.value }))
-                }
-              />
+              <Input placeholder="CVE Tracker" {...form.register("brandAppName")} />
             </div>
             <div className="space-y-1">
               <Label>{t.logoUrl}</Label>
-              <Input
-                value={branding.logoUrl}
-                onChange={(event) =>
-                  setBranding((state) => ({ ...state, logoUrl: event.target.value }))
-                }
-              />
+              <Input placeholder="https://exemple.com/logo.svg" {...form.register("brandLogoUrl")} />
+              {form.formState.errors.brandLogoUrl && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.brandLogoUrl.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>{t.primaryColor}</Label>
-              <Input
-                type="color"
-                value={branding.primary}
-                onChange={(event) =>
-                  setBranding((state) => ({ ...state, primary: event.target.value }))
+              <Input type="color" className="h-10 w-20 p-1" {...form.register("brandPrimaryColor")} />
+            </div>
+            <div className="space-y-1">
+              <Label>{t.reportHeaderText}</Label>
+              <Input placeholder={t.reportHeaderPlaceholder} {...form.register("reportHeaderText")} />
+            </div>
+            <div className="space-y-1">
+              <Label>{t.reportFooterText}</Label>
+              <Input placeholder={t.reportFooterPlaceholder} {...form.register("reportFooterText")} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label>{t.reportToc}</Label>
+                <p className="text-xs text-muted-foreground">{t.reportTocDesc}</p>
+              </div>
+              <Switch
+                checked={form.watch("reportShowToc")}
+                onCheckedChange={(value) =>
+                  form.setValue("reportShowToc", value, { shouldDirty: true })
                 }
               />
             </div>
+            <p className="text-xs text-muted-foreground">{t.brandingHint}</p>
+            <Button type="button" onClick={() => void saveDataSources()} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t.saving}
+                </>
+              ) : (
+                t.saveBranding
+              )}
+            </Button>
           </CardContent>
         </Card>
       </section>

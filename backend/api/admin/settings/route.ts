@@ -11,6 +11,25 @@ const settingsSchema = z.object({
   cmdbApiToken: z.string().trim().optional().default(""),
   webhookUrl: z.string().trim().url().or(z.literal("")).default(""),
   cmdbEnabled: z.boolean().default(false),
+  // Branding / report personnalisation
+  brandAppName: z.string().trim().max(120).optional().default(""),
+  brandLogoUrl: z
+    .string()
+    .trim()
+    .url()
+    .or(z.literal(""))
+    .optional()
+    .default(""),
+  brandPrimaryColor: z
+    .string()
+    .trim()
+    .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/, "Invalid hex color")
+    .or(z.literal(""))
+    .optional()
+    .default(""),
+  reportHeaderText: z.string().trim().max(400).optional().default(""),
+  reportFooterText: z.string().trim().max(400).optional().default(""),
+  reportShowToc: z.boolean().default(true),
 });
 
 function unauthorized() {

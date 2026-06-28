@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calculateSeverityFromCvss } from '@/lib/v2/severity'
 import { mapCveToLegacy } from '@/lib/v2/mappers'
+import { publishEvent } from '@/lib/webhooks'
 
 interface NVDCVE {
   cve: {
@@ -84,6 +85,17 @@ export async function POST(request: NextRequest) {
         publishedDate: publishedAt,
         lastModifiedDate: modifiedAt,
       },
+    })
+
+    // Publish a webhook event so subscribers (SIEM…) can react in real time.
+    // Fire-and-forget — never block the import on a slow subscriber.
+    publishEvent('cve.created', {
+      cveId: upserted.cveId,
+      severity: upserted.severity,
+      cvssV3Score: upserted.cvssV3Score,
+      title: upserted.title,
+      source: upserted.source,
+      publishedAt: upserted.publishedAt,
     })
 
     return NextResponse.json(mapCveToLegacy(upserted), { status: 201 })

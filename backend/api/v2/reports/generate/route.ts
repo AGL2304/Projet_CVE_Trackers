@@ -13,6 +13,9 @@ import { writeAuditLog } from "@/lib/v2/audit";
  */
 const filterSchema = z
   .object({
+    // Report scope: "cve" (default) reports on the CVE database; "assets"
+    // reports on the scanned-asset inventory and the products discovered on it.
+    scope: z.enum(["cve", "assets"]).optional(),
     severity: z.array(z.nativeEnum(Severity)).optional(),
     status: z.array(z.nativeEnum(CVEStatus)).optional(),
     source: z.array(z.nativeEnum(CveSource)).optional(),
@@ -23,6 +26,9 @@ const filterSchema = z
     search: z.string().trim().max(200).optional(),
     limit: z.number().int().min(1).max(50_000).optional(),
     title: z.string().trim().max(120).optional(),
+    // Asset-scope filters (ignored for cve scope)
+    criticality: z.enum(["low", "medium", "high", "critical"]).optional(),
+    assetStatus: z.enum(["active", "inactive", "retired"]).optional(),
   })
   .partial();
 

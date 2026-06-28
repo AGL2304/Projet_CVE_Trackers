@@ -488,7 +488,7 @@ function KpiCard({
   emphasize?: boolean;
 }) {
   return (
-    <Card className={emphasize ? "card-glow" : "card-elevated"}>
+    <Card className={`proactive-top ${emphasize ? "card-glow" : "card-elevated"}`}>
       <CardHeader className="pb-3">
         <CardDescription className="flex items-center justify-between text-xs uppercase tracking-wide">
           {title}
@@ -496,10 +496,7 @@ function KpiCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <p
-          className="text-3xl font-semibold"
-          style={emphasize ? { color: "var(--severity-critical)" } : undefined}
-        >
+        <p className={`text-3xl font-semibold ${emphasize ? "text-grad-warm" : ""}`}>
           {value}
         </p>
         <p className="text-xs text-muted-foreground">{hint}</p>
