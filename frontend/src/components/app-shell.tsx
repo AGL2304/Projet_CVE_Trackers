@@ -80,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.key) return;
       const isCmdK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
       if (isCmdK) {
         event.preventDefault();
@@ -124,7 +125,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen">
         <div className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar xl:flex" />
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
             <div className="h-16 px-4 lg:px-6" />
           </header>
@@ -138,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <Sidebar />
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
           <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
             <Sheet>

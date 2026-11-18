@@ -26,7 +26,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useCVEs } from "@/hooks/queries";
+import { useRecentCves } from "@/hooks/queries";
 import { normalizeCve, cveDate } from "@/lib/cve-helpers";
 import { includesSearchTerm, normalizeSearchTerm } from "@/lib/search";
 import { SeverityBadge } from "@/components/severity-badge";
@@ -141,6 +141,10 @@ const copy = {
     noResultCount: "resultat(s)",
     selected: "element(s) selectionne(s)",
     cardCvss: "CVSS",
+    patchCol: "Correctif",
+    remediated: "Corrigee",
+    patchAvailable: "Patch dispo",
+    noPatch: "Aucun",
   },
   en: {
     assignDone: "Assignment completed",
@@ -185,6 +189,10 @@ const copy = {
     noResultCount: "result(s)",
     selected: "item(s) selected",
     cardCvss: "CVSS",
+    patchCol: "Fix",
+    remediated: "Remediated",
+    patchAvailable: "Patch available",
+    noPatch: "None",
   },
 } as const;
 
@@ -195,7 +203,11 @@ export default function CvesPage() {
   const setViewMode = useUiPreferencesStore((state) => state.setCveViewMode);
   const upsertAssignment = useUiPreferencesStore((state) => state.upsertAssignment);
 
-  const { data, isLoading, isError, refetch } = useCVEs();
+  // Bounded to the most recent 2000 CVEs: the full table is NVD-synced and
+  // can hold hundreds of thousands of rows (full-table fetch took ~9 min
+  // before this fix). Search/filter/sort below still operate client-side,
+  // just over this bounded, recent slice instead of everything ever synced.
+  const { data, isLoading, isError, refetch } = useRecentCves(2000);
 
   const [search, setSearch] = React.useState("");
   const [severityFilter, setSeverityFilter] = React.useState("all");
@@ -301,6 +313,7 @@ export default function CvesPage() {
             aria-label={`Select row ${row.id}`}
           />
         ),
+        enableSorting: false,
         size: 40,
       },
       {
@@ -342,8 +355,16 @@ export default function CvesPage() {
         header: "Statut",
         cell: ({ row }) => <Badge variant="secondary">{row.original.vulnStatus ?? "unknown"}</Badge>,
       },
+      {
+        id: "patch",
+        header: t.patchCol,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <PatchBadge cveStatus={row.original.cveStatus} hasPatch={row.original.hasPatch} t={t} />
+        ),
+      },
     ],
-    [locale]
+    [locale, t]
   );
 
   const table = useReactTable({
@@ -705,7 +726,7 @@ export default function CvesPage() {
                     <TableRow key={headerGroup.id}>
                       {headerGroup.headers.map((header) => (
                         <TableHead key={header.id} style={{ width: header.getSize() || undefined }}>
-                          {header.isPlaceholder ? null : (
+                          {header.isPlaceholder ? null : header.column.getCanSort() ? (
                             <button
                               type="button"
                               onClick={header.column.getToggleSortingHandler()}
@@ -713,6 +734,8 @@ export default function CvesPage() {
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
                             </button>
+                          ) : (
+                            flexRender(header.column.columnDef.header, header.getContext())
                           )}
                         </TableHead>
                       ))}
@@ -756,7 +779,10 @@ export default function CvesPage() {
                   <Link href={`/cves/${record.cveId}`} className="font-semibold hover:underline">
                     {record.cveId}
                   </Link>
-                  <SeverityBadge value={record.severity} />
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <SeverityBadge value={record.severity} />
+                    <PatchBadge cveStatus={record.cveStatus} hasPatch={record.hasPatch} t={t} />
+                  </div>
                 </div>
                 <CardDescription>
                   {record.vendor} · {record.product}
@@ -814,6 +840,24 @@ export default function CvesPage() {
       ) : null}
     </div>
   );
+}
+
+function PatchBadge({
+  cveStatus,
+  hasPatch,
+  t,
+}: {
+  cveStatus?: string;
+  hasPatch?: boolean;
+  t: { remediated: string; patchAvailable: string; noPatch: string };
+}) {
+  if (cveStatus === "REMEDIATED") {
+    return <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">{t.remediated}</Badge>;
+  }
+  if (hasPatch) {
+    return <Badge className="bg-sky-500/15 text-sky-700 border-sky-500/30">{t.patchAvailable}</Badge>;
+  }
+  return <Badge variant="outline">{t.noPatch}</Badge>;
 }
 
 function FilterSelect({

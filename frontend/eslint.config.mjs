@@ -13,7 +13,7 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
-      // TypeScript — gentle but non-zero
+      // TypeScript - gentle but non-zero
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": [
         "warn",
@@ -51,7 +51,7 @@ const eslintConfig = [
     },
   },
   {
-    // Worker / scripts run in plain Node — relax the console & require rules
+    // Worker / scripts run in plain Node - relax the console & require rules
     files: ["../backend/scripts/**/*.js", "**/scripts/**/*.js"],
     rules: {
       "no-console": "off",

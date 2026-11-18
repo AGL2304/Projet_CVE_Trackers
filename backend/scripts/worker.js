@@ -9,7 +9,7 @@
  *   4. Drain ReportJob.status=QUEUED rows (PDF/CSV/JSON report generation)
  *
  * Runs as a long-lived Node process: `node backend/scripts/worker.js`
- * No build step required — pure JS reading Prisma client.
+ * No build step required - pure JS reading Prisma client.
  */
 
 const fs = require("node:fs");
@@ -443,7 +443,7 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
-// Severity ramp — CVE Tracker charte graphique (low green → critical red).
+// Severity ramp - CVE Tracker charte graphique (low green → critical red).
 function severityColor(sev) {
   return (
     {
@@ -456,7 +456,7 @@ function severityColor(sev) {
   );
 }
 
-// Inline gauge logo (severity dial) — the CVE Tracker brand mark. `stroke`
+// Inline gauge logo (severity dial) - the CVE Tracker brand mark. `stroke`
 // recolors the needle/hub so it can sit on light or gradient backgrounds.
 function brandLogoSvg(size = 44, needle = "#0B1220") {
   return `<svg viewBox="0 0 200 200" width="${size}" height="${size}" role="img" aria-label="CVE Tracker" style="display:block">
@@ -471,7 +471,7 @@ function brandLogoSvg(size = 44, needle = "#0B1220") {
   </svg>`;
 }
 
-// Branding defaults — used when AppSettings is missing/empty or the columns
+// Branding defaults - used when AppSettings is missing/empty or the columns
 // don't yet exist (resilient to a not-yet-migrated DB).
 const BRANDING_DEFAULTS = {
   brandAppName: "CVE Tracker",
@@ -574,7 +574,7 @@ function renderHtmlReport({ job, filter, cves, stats, branding = BRANDING_DEFAUL
     .sort((a, b) => (b.cvssV3Score ?? 0) - (a.cvssV3Score ?? 0))
     .slice(0, 20);
 
-  // Full table — keep all entries; modern browsers handle 10k+ rows
+  // Full table - keep all entries; modern browsers handle 10k+ rows
   const rowsHtml = cves
     .map((c) => {
       const refs = (() => {
@@ -620,12 +620,12 @@ function renderHtmlReport({ job, filter, cves, stats, branding = BRANDING_DEFAUL
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${v}</td></tr>`)
     .join("");
 
-  // Table of contents (Sommaire) — anchors to the section ids below.
+  // Table of contents (Sommaire) - anchors to the section ids below.
   const tocItems = [
     { id: "sec-summary", label: "Synthèse" },
     { id: "sec-severity", label: "Distribution par sévérité" },
     { id: "sec-statussource", label: "Répartition par statut & source" },
-    ...(topCves.length > 0 ? [{ id: "sec-top", label: "Top 20 — CVE les plus sévères" }] : []),
+    ...(topCves.length > 0 ? [{ id: "sec-top", label: "Top 20 - CVE les plus sévères" }] : []),
     { id: "sec-list", label: `Liste complète (${cves.length})` },
   ];
   const tocHtml = showToc
@@ -643,7 +643,7 @@ function renderHtmlReport({ job, filter, cves, stats, branding = BRANDING_DEFAUL
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* CVE Tracker — charte graphique : rampe de sévérité + accent bleu + navy.
+  /* CVE Tracker - charte graphique : rampe de sévérité + accent bleu + navy.
      Corps clair (lisible à l'impression) ; bandeau & dégradés de marque. */
   :root {
     color-scheme: light;
@@ -669,9 +669,9 @@ function renderHtmlReport({ job, filter, cves, stats, branding = BRANDING_DEFAUL
   }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 0 0 64px; }
   .content { padding: 0 40px; }
-  /* Direction 1 — rampe de sévérité : bandeau d'en-tête de page. */
+  /* Direction 1 - rampe de sévérité : bandeau d'en-tête de page. */
   .brandbar { height: 6px; background: var(--grad-severity); }
-  /* Direction 3 — sécurité proactive : bandeau d'aperçu. */
+  /* Direction 3 - sécurité proactive : bandeau d'aperçu. */
   header {
     background: var(--grad-proactive); color: #EAF2FF;
     padding: 26px 40px 22px; margin-bottom: 24px;
@@ -752,8 +752,12 @@ ${primaryOverride}
 
   <div class="content">
   <div class="toolbar no-print">
-    <button class="btn btn-primary" onclick="window.print()">📄 Imprimer / Enregistrer en PDF</button>
-    <span style="font-size:11px;color:#5A6B86;align-self:center">Astuce: Ctrl+P → "Enregistrer en PDF"</span>
+    <button class="btn btn-primary" onclick="window.print()">📄 Enregistrer au format PDF (Ctrl+P)</button>
+    <span style="font-size:11px;color:#5A6B86;align-self:center">Dans la fenêtre d'impression, choisissez la destination « Enregistrer au format PDF ».</span>
+  </div>
+  <div class="no-print" style="margin:0 0 16px;padding:10px 14px;border:1px solid #F3C9A0;background:#FFF7EC;border-radius:8px;font-size:12px;color:#7A4E12;line-height:1.6">
+    ⚠️ <strong>Pour un PDF valide</strong>, sélectionnez la destination <strong>« Enregistrer au format PDF »</strong> (moteur du navigateur).
+    Évitez <strong>« Microsoft Print to PDF »</strong> : ce pilote produit des en-têtes d'objets non conformes que les lecteurs stricts (Adobe, aperçu Windows) refusent d'ouvrir.
   </div>
 
   ${tocHtml}
@@ -791,7 +795,7 @@ ${primaryOverride}
 
   ${
     topCves.length > 0
-      ? `<h2 id="sec-top">Top 20 — CVE les plus sévères</h2>
+      ? `<h2 id="sec-top">Top 20 - CVE les plus sévères</h2>
   <div>${topCvesHtml}</div>`
       : ""
   }
@@ -874,12 +878,12 @@ function assetProductLabel(product) {
 // recompute/backfill script); it is the JS twin of
 // frontend/src/lib/v2/exposure.ts used by the sync/cpe ingest path.
 // eslint-disable-next-line global-require
-const { assetExposure } = require("./exposure.js");
+const { assetExposure, DANGEROUS_SERVICES } = require("./exposure.js");
 
 const SEV_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
 
 // Deduped, severity-sorted list of every CVE matched to an asset, with the
-// product it came from — so each CVE can be listed and linked individually.
+// product it came from - so each CVE can be listed and linked individually.
 function assetCveList(asset) {
   const seen = new Map(); // cveId -> { cveId, severity, score, product, patchStatus }
   for (const pl of asset.productLinks || []) {
@@ -978,6 +982,331 @@ function renderAssetsCsv(assets) {
   return "﻿" + [header.join(","), ...rows].join("\r\n");
 }
 
+// ── BLUF (Bottom Line Up Front) decision support ────────────────────────────
+// Everything below turns the raw inventory into "what to do, in what order".
+
+const URGENCY_RANK = { critical: 3, high: 2, medium: 1, low: 0 };
+
+function cveSev(c) {
+  return String(c.severity || "NONE").toUpperCase();
+}
+
+function urgencyLabel(u) {
+  return { critical: "Immédiat", high: "Court terme", medium: "À planifier", low: "Surveillance" }[u] || "-";
+}
+
+// Concrete, prioritized remediation steps for ONE asset, derived from its
+// open-service exposure (exp.hits) and its matched CVEs (cveList). Each action
+// has an urgency so the whole fleet can be ranked into a single queue.
+function assetRecommendedActions(exp, cveList) {
+  const actions = [];
+  const dangerous = (exp.hits || []).filter((h) => h.weight >= 16);
+  const crit = cveList.filter((c) => cveSev(c) === "CRITICAL");
+  const high = cveList.filter((c) => cveSev(c) === "HIGH");
+
+  if (crit.length) {
+    actions.push({
+      urgency: "critical",
+      label: "Corriger",
+      text: `Appliquer en urgence les correctifs de ${crit.length} CVE critique${crit.length > 1 ? "s" : ""} (${crit.slice(0, 3).map((c) => c.cveId).join(", ")}${crit.length > 3 ? ", …" : ""}).`,
+    });
+  }
+  if (dangerous.length) {
+    const top = dangerous.slice(0, 4).map((h) => `${h.port}/${h.label}`).join(", ");
+    actions.push({
+      urgency: dangerous.some((h) => h.weight >= 30) ? "critical" : "high",
+      label: "Confiner",
+      text: `Restreindre ou segmenter l'exposition réseau : ${top}${dangerous.length > 4 ? ", …" : ""}.`,
+    });
+  }
+  if (!crit.length && high.length) {
+    actions.push({
+      urgency: "high",
+      label: "Planifier",
+      text: `Programmer la remédiation de ${high.length} CVE élevée${high.length > 1 ? "s" : ""} (${high.slice(0, 3).map((c) => c.cveId).join(", ")}${high.length > 3 ? ", …" : ""}).`,
+    });
+  }
+  if (!actions.length) {
+    actions.push({ urgency: "low", label: "Surveiller", text: "Aucune exposition critique - maintenir la surveillance." });
+  }
+  // strongest urgency first
+  actions.sort((a, b) => URGENCY_RANK[b.urgency] - URGENCY_RANK[a.urgency]);
+  return actions;
+}
+
+// The decision summary: a posture verdict + the prioritized action queue.
+function computeAssetBluf(assets, stats) {
+  const ranked = assets
+    .map((a) => {
+      const exp = a._exposure || assetExposure(a);
+      const cves = assetCveList(a);
+      return { a, exp, cves, actions: assetRecommendedActions(exp, cves) };
+    })
+    .sort((x, y) => y.exp.score - x.exp.score);
+
+  // Immediate = a critical CVE is exposed OR a high-weight dangerous service is open.
+  const immediate = ranked.filter(
+    (r) => r.exp.cve.critical > 0 || (r.exp.hits || []).some((h) => h.weight >= 30)
+  );
+  const elevated = ranked.filter(
+    (r) => !immediate.includes(r) && (r.exp.cve.high > 0 || (r.exp.hits || []).some((h) => h.weight >= 16))
+  );
+
+  let dangerousServices = 0;
+  for (const r of ranked) dangerousServices += (r.exp.hits || []).filter((h) => h.weight >= 16).length;
+
+  let posture;
+  let postureClass;
+  let verdict;
+  if (immediate.length > 0) {
+    posture = "CRITIQUE";
+    postureClass = "crit";
+    verdict = `${immediate.length} actif${immediate.length > 1 ? "s exigent" : " exige"} une action corrective immédiate : CVE critiques exposées et/ou services à haut risque accessibles sur le réseau.`;
+  } else if (elevated.length > 0 || (stats.highCves ?? 0) > 0) {
+    posture = "ÉLEVÉE";
+    postureClass = "high";
+    const n = Math.max(elevated.length, stats.highCves ?? 0);
+    verdict = `Aucune exposition critique, mais ${n} point${n > 1 ? "s" : ""} à risque élevé à traiter à court terme avant qu'ils ne s'aggravent.`;
+  } else if ((stats.totalVulns ?? 0) > 0 || dangerousServices > 0) {
+    posture = "MODÉRÉE";
+    postureClass = "med";
+    verdict = "Exposition résiduelle modérée ; priorité à la réduction de surface d'attaque et au suivi régulier.";
+  } else {
+    posture = "MAÎTRISÉE";
+    postureClass = "low";
+    verdict = "Aucune vulnérabilité ni service dangereux détecté sur le périmètre analysé. Maintenir la posture.";
+  }
+
+  // The action queue: assets carrying at least one non-surveillance action.
+  const queue = ranked.filter((r) => r.actions.some((ac) => ac.urgency !== "low"));
+
+  return { ranked, immediate, elevated, dangerousServices, posture, postureClass, verdict, queue };
+}
+
+// ── Per-asset documentation helpers ─────────────────────────────────────────
+// French criticality labels for the prose/fiches (kept apart from the colour map).
+const LEVEL_FR = { critical: "Critique", high: "Élevé", medium: "Modéré", low: "Faible" };
+
+// Concrete risk + corrective-measure copy per dangerous port. Keyed by TCP port;
+// used to turn an open-service finding into an actionable remediation row. Ports
+// absent here fall back to portRemediation()'s generic guidance.
+const PORT_REMEDIATION = {
+  21: { risk: "FTP en clair : identifiants et fichiers interceptables.", fix: "Désactiver FTP ou migrer vers FTPS/SFTP ; interdire l'accès anonyme." },
+  22: { risk: "SSH exposé : cible de force brute.", fix: "Authentification par clé uniquement, désactiver root, restreindre par pare-feu/Fail2ban." },
+  23: { risk: "Telnet en clair : session et mot de passe lisibles sur le réseau.", fix: "Désactiver Telnet et le remplacer intégralement par SSH." },
+  25: { risk: "SMTP exposé : relais ouvert / énumération possible.", fix: "Restreindre le relais, exiger l'authentification, limiter l'exposition externe." },
+  53: { risk: "DNS exposé : amplification / transfert de zone.", fix: "Désactiver la récursion ouverte et les transferts de zone non autorisés." },
+  80: { risk: "HTTP en clair : trafic interceptable.", fix: "Forcer HTTPS (redirection + HSTS) et maintenir le serveur à jour." },
+  110: { risk: "POP3 en clair.", fix: "Imposer POP3S/IMAPS (TLS) et désactiver les variantes en clair." },
+  111: { risk: "rpcbind : cartographie des services RPC (NFS…).", fix: "Filtrer le portmapper, n'exposer RPC que sur réseau de confiance." },
+  139: { risk: "NetBIOS : énumération et accès SMB hérité.", fix: "Désactiver NetBIOS, bloquer 137-139 au pare-feu périmétrique." },
+  445: { risk: "SMB : mouvement latéral et exécution distante.", fix: "Bloquer SMB en bordure, désactiver SMBv1, appliquer les correctifs (MS17-010…)." },
+  161: { risk: "SNMP : fuite de configuration via community par défaut.", fix: "Passer en SNMPv3, supprimer les community 'public'/'private'." },
+  512: { risk: "rexec : exécution distante en clair.", fix: "Désactiver les r-services, n'utiliser que SSH." },
+  513: { risk: "rlogin : accès basé sur la confiance, en clair.", fix: "Désactiver rlogin et les fichiers .rhosts/hosts.equiv." },
+  514: { risk: "rsh : exécution distante en clair, sans authentification forte.", fix: "Désactiver rsh, supprimer la confiance .rhosts, imposer SSH." },
+  1099: { risk: "Java RMI : désérialisation → exécution de code distante.", fix: "Restreindre RMI au réseau interne, mettre à jour la JVM, filtrer la désérialisation." },
+  1433: { risk: "MSSQL exposé.", fix: "Restreindre par pare-feu, mots de passe forts, désactiver xp_cmdshell." },
+  1524: { risk: "ingreslock : port de bind-shell classique (souvent backdoor).", fix: "Investiguer une compromission, fermer le port, ré-imager si confirmé." },
+  2049: { risk: "NFS : systèmes de fichiers exportés potentiellement en lecture/écriture.", fix: "Restreindre les exports (no_root_squash off), filtrer par hôte, préférer NFSv4 + Kerberos." },
+  2121: { risk: "FTP alternatif en clair.", fix: "Désactiver ou migrer vers SFTP/FTPS." },
+  2375: { risk: "API Docker non authentifiée : équivaut à un root distant.", fix: "Ne jamais exposer l'API ; activer TLS (2376) et l'authentification client." },
+  2376: { risk: "API Docker (TLS) exposée.", fix: "Restreindre l'accès réseau, vérifier les certificats client." },
+  3306: { risk: "MySQL/MariaDB exposé.", fix: "Lier en local/pare-feu, mots de passe forts, désactiver l'accès distant root." },
+  3389: { risk: "RDP : accès distant et mouvement latéral.", fix: "VPN + MFA, NLA activé, jamais d'exposition directe Internet, correctifs à jour." },
+  3632: { risk: "distccd : compilation distribuée → exécution de code distante.", fix: "Désactiver distcc ou le restreindre strictement au réseau de build." },
+  5432: { risk: "PostgreSQL exposé.", fix: "Restreindre pg_hba.conf et le pare-feu, imposer TLS et mots de passe forts." },
+  5900: { risk: "VNC : contrôle distant du bureau, souvent faible auth.", fix: "Tunneler via SSH/VPN, mot de passe fort, ne pas exposer en direct." },
+  5984: { risk: "CouchDB : base potentiellement non authentifiée.", fix: "Activer l'authentification, restreindre l'interface d'écoute." },
+  6000: { risk: "X11 : capture d'écran et de frappe possible.", fix: "Désactiver l'écoute TCP de X (-nolisten tcp), tunneler via SSH." },
+  6379: { risk: "Redis : souvent sans authentification → exécution de code.", fix: "Activer requirepass/ACL, lier en local, protected-mode on, pare-feu." },
+  6667: { risk: "IRC : canal de contrôle (parfois bot/backdoor).", fix: "Fermer si non requis, investiguer un éventuel C2." },
+  6697: { risk: "IRC (TLS).", fix: "Fermer si non requis, surveiller l'usage." },
+  8009: { risk: "AJP (Ghostcat, CVE-2020-1938) : lecture de fichiers / RCE Tomcat.", fix: "Désactiver le connecteur AJP ou exiger un secret, mettre Tomcat à jour." },
+  8080: { risk: "HTTP alternatif en clair.", fix: "Forcer TLS, authentifier les consoles d'administration." },
+  8180: { risk: "Console Tomcat exposée.", fix: "Restreindre l'accès, supprimer les comptes par défaut, mettre à jour." },
+  8443: { risk: "HTTPS alternatif / console d'admin.", fix: "Restreindre l'accès, certificats valides, correctifs à jour." },
+  8787: { risk: "Ruby DRb : objets distants → exécution de code.", fix: "Désactiver DRb sur interface publique, restreindre au localhost." },
+  9200: { risk: "Elasticsearch (HTTP) : souvent non authentifié.", fix: "Activer la sécurité (auth/TLS), lier en local, pare-feu." },
+  9300: { risk: "Elasticsearch (transport) exposé.", fix: "Restreindre au cluster, activer TLS de transport." },
+  11211: { risk: "Memcached : non authentifié, amplification DDoS.", fix: "Lier en local, désactiver UDP, pare-feu." },
+  27017: { risk: "MongoDB : souvent sans authentification.", fix: "Activer l'authentification + TLS, lier en local, pare-feu." },
+};
+
+// Remediation copy for a port. Falls back to generic surface-reduction advice
+// (scaled by the dangerous-service label when known) for ports outside the map.
+function portRemediation(port, label) {
+  if (PORT_REMEDIATION[port]) return PORT_REMEDIATION[port];
+  return {
+    risk: `${label || "Service"} accessible sur le réseau : surface d'attaque exploitable.`,
+    fix: "Confirmer la légitimité du service, restreindre l'accès au strict nécessaire (pare-feu/segmentation) ou le désactiver.",
+  };
+}
+
+// Opening section: what this report is, how it was produced, how to read it.
+function renderIntro({ stats, generatedAt, brandName }) {
+  const ports = stats.totalPorts ?? 0;
+  const scopeLine =
+    `${stats.total} actif${stats.total > 1 ? "s" : ""}, ` +
+    `${ports} port${ports > 1 ? "s" : ""} ouvert${ports > 1 ? "s" : ""}, ` +
+    `${stats.totalProducts} produit${stats.totalProducts > 1 ? "s" : ""} identifié${stats.totalProducts > 1 ? "s" : ""}`;
+  const legend = ["critical", "high", "medium", "low"]
+    .map((lvl) => `<span class="legend-item"><span class="legend-dot" style="background:${assetCriticalityColor(lvl)}"></span>${LEVEL_FR[lvl]}</span>`)
+    .join("");
+  return `<section id="sec-intro">
+    <h2>Introduction et méthodologie</h2>
+    <div class="intro-grid">
+      <div class="intro-card">
+        <h3>Objet du rapport</h3>
+        <p>Ce document présente l'inventaire de sécurité et l'évaluation d'exposition du périmètre analysé par <strong>${escapeHtml(brandName)}</strong> au ${escapeHtml(generatedAt.slice(0, 10))} : ${scopeLine}. Il fournit une posture globale, un plan d'action priorisé et une fiche détaillée par actif.</p>
+      </div>
+      <div class="intro-card">
+        <h3>Méthode</h3>
+        <p>Chaque actif est découvert par balayage réseau : services et ports ouverts, bannières, empreintes CPE. Les services porteurs d'un CPE sont corrélés à la base NVD pour identifier les CVE connues. Un score d'exposition combine la <em>surface réseau</em> (services dangereux ouverts) et la <em>sévérité des CVE</em> corrélées.</p>
+      </div>
+      <div class="intro-card">
+        <h3>Comment lire ce rapport</h3>
+        <p>Commencez par la <strong>synthèse décisionnelle</strong> (posture + métriques), puis suivez le <strong>plan d'action priorisé</strong> de haut en bas. Les <strong>fiches détaillées</strong> justifient chaque priorité (services, remédiations, CVE) ; le détail du calcul figure en <strong>annexe</strong>.</p>
+        <div class="legend">${legend}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+// One self-contained dossier per asset, ordered by exposure: header + metadata,
+// the full open-service table (every port, CPE-bearing or not), prioritized
+// service remediations, the action plan, and the matched-CVE table. The CVE
+// subsection carries id="cve-<assetId>" so the inventory's CVE links resolve.
+function renderAssetFiche(entry, idx) {
+  const { a, exp, cves, actions } = entry;
+  const services = (Array.isArray(a.services) ? a.services : []).filter((s) => s && s.port != null);
+
+  const svcRows = services
+    .map((s) => {
+      const def = DANGEROUS_SERVICES[s.port];
+      return { s, weight: def ? def.weight : 2, label: def ? def.label : (s.service || "-") };
+    })
+    .sort((x, y) => y.weight - x.weight || x.s.port - y.s.port);
+
+  const svcTable = svcRows
+    .map(({ s, weight, label }) => {
+      const wcls = weight >= 30 ? "wt wt-crit" : weight >= 16 ? "wt wt-high" : weight >= 6 ? "wt wt-med" : "wt wt-low";
+      const banner = (s.banner || "").trim();
+      return `<tr>
+        <td class="mono">${s.port}/${escapeHtml(s.protocol || "tcp")}</td>
+        <td>${escapeHtml(s.service || "-")}</td>
+        <td>${escapeHtml([s.product, s.version].filter(Boolean).join(" ") || "-")}</td>
+        <td class="mono">${s.cpe ? escapeHtml(s.cpe) : '<span class="muted">-</span>'}</td>
+        <td>${banner ? `<span class="muted" title="${escapeHtml(banner)}">${escapeHtml(banner.slice(0, 48))}${banner.length > 48 ? "…" : ""}</span>` : '<span class="muted">-</span>'}</td>
+        <td class="num"><span class="${wcls}" title="${escapeHtml(label)}">${weight}</span></td>
+      </tr>`;
+    })
+    .join("");
+
+  const remRows = svcRows
+    .filter(({ weight }) => weight >= 16)
+    .map(({ s, label }) => {
+      const rem = portRemediation(s.port, label);
+      return `<tr>
+        <td class="mono">${s.port}</td>
+        <td><strong>${escapeHtml(label)}</strong><div class="muted">${escapeHtml(rem.risk)}</div></td>
+        <td>${escapeHtml(rem.fix)}</td>
+      </tr>`;
+    })
+    .join("");
+  const remBlock = remRows
+    ? `<h4>Remédiation prioritaire des services exposés</h4>
+       <table class="svctab"><thead><tr><th>Port</th><th>Service · risque</th><th>Mesure corrective</th></tr></thead><tbody>${remRows}</tbody></table>`
+    : "";
+
+  const actsHtml = actions
+    .map((ac) => `<li><span class="act-k act-${ac.urgency}">${escapeHtml(ac.label)}</span> ${escapeHtml(ac.text)}</li>`)
+    .join("");
+
+  const cveRows = cves
+    .map((c) => {
+      const sevKey = String(c.severity).toLowerCase();
+      return `<tr>
+        <td><a href="https://nvd.nist.gov/vuln/detail/${escapeHtml(c.cveId)}" target="_blank" rel="noopener">${escapeHtml(c.cveId)}</a></td>
+        <td><span class="badge" style="background:${assetCriticalityColor(sevKey)}">${escapeHtml(c.severity)}</span></td>
+        <td class="num">${c.score != null ? Number(c.score).toFixed(1) : "-"}</td>
+        <td>${escapeHtml(c.product || "-")}</td>
+        <td>${escapeHtml(String(c.patchStatus).toLowerCase())}</td>
+      </tr>`;
+    })
+    .join("");
+  const cveBlock = cves.length
+    ? `<h4 id="cve-${escapeHtml(a.id)}">Vulnérabilités confirmées (${cves.length})</h4>
+       <p class="muted" style="margin:-2px 0 8px">Chaque identifiant ouvre la fiche officielle sur la base NVD (nvd.nist.gov).</p>
+       <table class="svctab"><thead><tr><th>CVE</th><th>Sévérité</th><th class="num">CVSS</th><th>Produit affecté</th><th>Correctif</th></tr></thead><tbody>${cveRows}</tbody></table>`
+    : `<h4 id="cve-${escapeHtml(a.id)}">Vulnérabilités confirmées</h4>
+       <p class="muted">Aucune CVE corrélée à ce jour pour les produits identifiés. L'exposition provient de la surface réseau (services ouverts ci-dessus). Relancer la corrélation CVE après mise à jour de la base NVD.</p>`;
+
+  const tint = assetCriticalityColor(exp.level);
+  const cveScore = exp.score - exp.serviceScore;
+  const meta = [
+    ["Type", escapeHtml(a.type || "-")],
+    ["Statut", escapeHtml(a.status || "-")],
+    ["Adresse MAC", a.mac ? `<span class="mono">${escapeHtml(a.mac)}</span>` : "-"],
+    ["Services ouverts", String(services.length)],
+    ["Surface réseau", `${exp.serviceScore} pts`],
+    ["Score CVE", `${cveScore} pts`],
+    ["CVE corrélées", `${exp.cve.total} (${exp.cve.critical}C / ${exp.cve.high}H)`],
+    ["Score d'exposition", `<strong>${exp.score}</strong> · ${LEVEL_FR[exp.level] || exp.level}`],
+  ]
+    .map(([k, v]) => `<div class="fiche-meta-k">${k}</div><div class="fiche-meta-v">${v}</div>`)
+    .join("");
+
+  return `<section class="fiche" id="fiche-${escapeHtml(a.id)}" style="border-left-color:${tint}">
+    <div class="fiche-head" style="background:linear-gradient(120deg, ${tint}22, transparent)">
+      <span class="fiche-prio">${idx + 1}</span>
+      <div class="fiche-head-main">
+        <h3>${escapeHtml(a.name)} <span class="muted mono">${escapeHtml(a.ip || a.hostname || "")}</span></h3>
+        <div><span class="badge" style="background:${assetCriticalityColor(a.criticality)}">${escapeHtml(a.criticality)}</span>
+          <span class="muted"> exposition ${exp.score} · ${LEVEL_FR[exp.level] || exp.level} · ${services.length} services · ${exp.cve.total} CVE</span></div>
+      </div>
+      <div class="fiche-score" style="color:${tint}">${exp.score}</div>
+    </div>
+    ${a.description ? `<p class="fiche-desc">${escapeHtml(a.description)}</p>` : ""}
+    <div class="fiche-meta">${meta}</div>
+    <h4>Services et ports ouverts (${services.length})</h4>
+    <table class="svctab"><thead><tr><th>Port</th><th>Service</th><th>Produit / version</th><th>CPE</th><th>Bannière</th><th class="num">Poids</th></tr></thead><tbody>${svcTable || '<tr><td colspan="6" class="muted">Aucun service ouvert détecté.</td></tr>'}</tbody></table>
+    ${remBlock}
+    <h4>Plan d'action</h4>
+    <ul class="actlist">${actsHtml}</ul>
+    ${cveBlock}
+  </section>`;
+}
+
+// Closing annex: the score model, a glossary, and the legal/ethical frame.
+function renderAnnex() {
+  return `<section id="sec-annex">
+    <h2>Annexes</h2>
+    <h3>A · Modèle de score d'exposition</h3>
+    <p class="muted" style="margin-top:-4px">Le score d'exposition d'un actif additionne deux composantes, plafonnées pour rester lisibles.</p>
+    <table class="gloss">
+      <tr><th>Composante</th><th>Calcul</th></tr>
+      <tr><td>Surface réseau</td><td>Somme des poids des services ouverts (table des services dangereux). Un port hors table compte pour 2.</td></tr>
+      <tr><td>Sévérité CVE</td><td>min(18 × critiques + 9 × élevées + 3 × modérées, 60)</td></tr>
+      <tr><td>Score total</td><td>Surface réseau + Sévérité CVE</td></tr>
+      <tr><td>Seuils de criticité</td><td>≥ 60 → Critique · ≥ 32 → Élevé · ≥ 12 → Modéré · sinon Faible</td></tr>
+    </table>
+    <h3>B · Glossaire</h3>
+    <table class="gloss">
+      <tr><th>Terme</th><th>Définition</th></tr>
+      <tr><td>CVE</td><td>Common Vulnerabilities and Exposures - identifiant public unique d'une vulnérabilité connue.</td></tr>
+      <tr><td>CPE</td><td>Common Platform Enumeration - désignation normalisée d'un produit/version, clé de corrélation avec les CVE.</td></tr>
+      <tr><td>CVSS</td><td>Common Vulnerability Scoring System - score de gravité de 0 à 10 d'une CVE.</td></tr>
+      <tr><td>NVD</td><td>National Vulnerability Database (NIST) - base de référence reliant CPE et CVE.</td></tr>
+      <tr><td>Exposition</td><td>Score composite (surface réseau + sévérité CVE) traduisant le risque exploitable d'un actif.</td></tr>
+      <tr><td>BLUF</td><td>Bottom Line Up Front - synthèse décisionnelle placée en tête de rapport.</td></tr>
+      <tr><td>Service dangereux</td><td>Port/service directement exploitable ou facilitant le mouvement latéral (data stores non authentifiés, accès distant, protocoles en clair).</td></tr>
+    </table>
+    <h3>C · Cadre légal et éthique</h3>
+    <p>Les analyses présentées portent exclusivement sur des actifs appartenant au périmètre autorisé du commanditaire. Toute analyse de vulnérabilité doit s'inscrire dans un mandat explicite ; l'accès ou le test de systèmes tiers sans autorisation écrite est susceptible de constituer une infraction (en France, articles 323-1 et suivants du Code pénal). Ce rapport est confidentiel et destiné aux seules équipes habilitées.</p>
+  </section>`;
+}
+
 function renderAssetsHtmlReport({ job, filter, assets, stats, branding = BRANDING_DEFAULTS }) {
   const generatedAt = new Date().toISOString();
   const title = filter.title || "Rapport d'inventaire des actifs";
@@ -1053,14 +1382,14 @@ function renderAssetsHtmlReport({ job, filter, assets, stats, branding = BRANDIN
         <td>
           ${a.ip ? `<div class="mono">${escapeHtml(a.ip)}</div>` : ""}
           ${a.hostname ? `<div class="muted">${escapeHtml(a.hostname)}</div>` : ""}
-          ${!a.ip && !a.hostname ? "—" : ""}
+          ${!a.ip && !a.hostname ? "-" : ""}
         </td>
         <td><span class="badge" style="background:${assetCriticalityColor(a.criticality)}">${escapeHtml(a.criticality)}</span></td>
         <td>${escapeHtml(a.status)}</td>
         <td>
           ${prods || ""}
           ${ports ? `<div class="ports">${ports}</div>` : ""}
-          ${!prods && !ports ? '<span class="muted">—</span>' : ""}
+          ${!prods && !ports ? '<span class="muted">-</span>' : ""}
         </td>
         <td>
           <div class="expscore">${exp.score}</div>
@@ -1071,48 +1400,105 @@ function renderAssetsHtmlReport({ job, filter, assets, stats, branding = BRANDIN
     })
     .join("");
 
-  // Per-asset CVE detail — every matched CVE is listed and linked to NVD so it
-  // can be consulted individually. Assets are ordered by exposure score.
-  const assetsWithCves = assets
-    .map((a) => ({ a, list: assetCveList(a), exp: a._exposure || assetExposure(a) }))
-    .filter((x) => x.list.length > 0)
-    .sort((x, y) => y.exp.score - x.exp.score);
+  // ── BLUF: decision summary + prioritized action plan ─────────────────────
+  const bluf = computeAssetBluf(assets, stats);
+  const maxExposure = stats.maxExposure ?? bluf.ranked.reduce((m, r) => Math.max(m, r.exp.score), 0);
 
-  const cveSectionsHtml = assetsWithCves
-    .map(({ a, list, exp }) => {
-      const cveRows = list
-        .map((c) => {
-          const sevKey = String(c.severity).toLowerCase();
-          return `<tr>
-            <td><a href="https://nvd.nist.gov/vuln/detail/${escapeHtml(c.cveId)}" target="_blank" rel="noopener">${escapeHtml(c.cveId)}</a></td>
-            <td><span class="badge" style="background:${assetCriticalityColor(sevKey)}">${escapeHtml(c.severity)}</span></td>
-            <td class="num">${c.score != null ? Number(c.score).toFixed(1) : "—"}</td>
-            <td>${escapeHtml(c.product || "—")}</td>
-            <td>${escapeHtml(String(c.patchStatus).toLowerCase())}</td>
-          </tr>`;
-        })
+  // One detailed dossier per asset, ordered by exposure (bluf.ranked is already
+  // sorted). Replaces the old CVE-only sections: each fiche carries the full
+  // open-service table, prioritized remediations, the action plan AND the
+  // matched-CVE table (anchored id="cve-<id>" so the inventory links resolve).
+  const introHtml = renderIntro({ stats, generatedAt, brandName });
+  const fichesHtml = bluf.ranked.map((e, i) => renderAssetFiche(e, i)).join("");
+  const annexHtml = renderAnnex();
+
+  const headlineMetrics = [
+    { label: "Actifs à traiter en priorité", value: bluf.immediate.length, tone: bluf.immediate.length ? "crit" : "ok" },
+    { label: "CVE critiques exposées", value: stats.criticalCves ?? 0, tone: (stats.criticalCves ?? 0) ? "crit" : "ok" },
+    { label: "Services dangereux exposés", value: bluf.dangerousServices, tone: bluf.dangerousServices ? "high" : "ok" },
+    { label: "Score d'exposition max", value: maxExposure, tone: maxExposure >= 60 ? "crit" : maxExposure >= 32 ? "high" : "ok" },
+  ];
+  const headlineHtml = headlineMetrics
+    .map((m) => `<div class="bluf-metric bm-${m.tone}"><div class="bm-val">${m.value}</div><div class="bm-lbl">${escapeHtml(m.label)}</div></div>`)
+    .join("");
+
+  const topAction = bluf.queue[0];
+  const immediateActionHtml = topAction
+    ? `<div class="bluf-now">
+        <span class="bluf-now-tag">⚡ Action immédiate</span>
+        <span><strong>${escapeHtml(topAction.a.name)}</strong>${topAction.a.ip ? ` <span class="mono muted">${escapeHtml(topAction.a.ip)}</span>` : ""} - ${escapeHtml(topAction.actions[0].text)}</span>
+      </div>`
+    : "";
+
+  const actionPlanRows = bluf.queue
+    .slice(0, 15)
+    .map((r, i) => {
+      const drivers = [];
+      if (r.exp.cve.critical) drivers.push(`<span class="sev sev-crit" title="CVE critiques">${r.exp.cve.critical}C</span>`);
+      if (r.exp.cve.high) drivers.push(`<span class="sev sev-high" title="CVE élevées">${r.exp.cve.high}H</span>`);
+      const dsvc = (r.exp.hits || [])
+        .filter((h) => h.weight >= 16)
+        .slice(0, 4)
+        .map((h) => `<span class="port" title="${escapeHtml(h.label)} (poids ${h.weight})">${h.port}/${escapeHtml(h.label)}</span>`)
+        .join(" ");
+      const topUrg = r.actions.reduce((m, a) => (URGENCY_RANK[a.urgency] > URGENCY_RANK[m] ? a.urgency : m), "low");
+      const actionsHtml = r.actions
+        .filter((a) => a.urgency !== "low")
+        .map((a) => `<div class="act"><span class="act-k act-${a.urgency}">${escapeHtml(a.label)}</span> ${escapeHtml(a.text)}</div>`)
         .join("");
-      return `<section id="cve-${escapeHtml(a.id)}" class="cvesec">
-        <h3>${escapeHtml(a.name)} <span class="muted">${escapeHtml(a.ip || a.hostname || "")}</span>
-          <span class="badge" style="background:${assetCriticalityColor(a.criticality)}">${escapeHtml(a.criticality)}</span>
-          <span class="muted">· exposition ${exp.score} · ${list.length} CVE</span>
-        </h3>
-        <table>
-          <thead><tr><th>CVE</th><th>Sévérité</th><th class="num">CVSS</th><th>Produit affecté</th><th>Correctif</th></tr></thead>
-          <tbody>${cveRows}</tbody>
-        </table>
-      </section>`;
+      return `<tr>
+        <td class="prio"><span class="prio-num">${i + 1}</span></td>
+        <td>
+          <strong>${escapeHtml(r.a.name)}</strong>
+          ${r.a.ip ? `<div class="mono muted">${escapeHtml(r.a.ip)}</div>` : ""}
+          <div style="margin-top:3px"><span class="badge" style="background:${assetCriticalityColor(r.a.criticality)}">${escapeHtml(r.a.criticality)}</span></div>
+        </td>
+        <td>
+          ${drivers.join(" ") || '<span class="muted">surface réseau</span>'}
+          ${dsvc ? `<div class="ports">${dsvc}</div>` : ""}
+          <div class="muted">score exposition ${r.exp.score}</div>
+        </td>
+        <td>${actionsHtml}</td>
+        <td><span class="ublob ublob-${topUrg}">${urgencyLabel(topUrg)}</span></td>
+      </tr>`;
     })
     .join("");
 
+  const blufHtml = `<section class="bluf bluf-${bluf.postureClass}" id="sec-bluf">
+    <div class="bluf-head">
+      <div class="bluf-posture">
+        <span class="bluf-plabel">Posture de sécurité</span>
+        <span class="bluf-pval">${bluf.posture}</span>
+      </div>
+      <p class="bluf-verdict">${escapeHtml(bluf.verdict)}</p>
+    </div>
+    <div class="bluf-metrics">${headlineHtml}</div>
+    ${immediateActionHtml}
+  </section>`;
+
+  const actionPlanHtml = bluf.queue.length
+    ? `<h2 id="sec-actions">Plan d'action priorisé (${bluf.queue.length})</h2>
+  <p class="muted" style="margin:-4px 0 12px">Actifs classés par exposition décroissante. Traiter de haut en bas : la priorité 1 est le risque le plus urgent du périmètre.</p>
+  <table class="actplan">
+    <thead><tr><th>#</th><th>Actif</th><th>Pilotes du risque</th><th>Action recommandée</th><th>Échéance</th></tr></thead>
+    <tbody>${actionPlanRows}</tbody>
+  </table>`
+    : "";
+
   const tocItems = [
-    { id: "sec-summary", label: "Synthèse" },
+    { id: "sec-bluf", label: "Synthèse décisionnelle (BLUF)" },
+  ];
+  if (bluf.queue.length > 0) {
+    tocItems.push({ id: "sec-actions", label: `Plan d'action priorisé (${bluf.queue.length})` });
+  }
+  tocItems.push(
+    { id: "sec-intro", label: "Introduction et méthodologie" },
+    { id: "sec-summary", label: "Indicateurs clés" },
     { id: "sec-breakdown", label: "Répartition (criticité, statut, type)" },
     { id: "sec-inventory", label: `Inventaire détaillé (${assets.length})` },
-  ];
-  if (assetsWithCves.length > 0) {
-    tocItems.push({ id: "sec-cves", label: `Vulnérabilités par actif (${assetsWithCves.length})` });
-  }
+    { id: "sec-fiches", label: `Fiches détaillées par actif (${assets.length})` },
+    { id: "sec-annex", label: "Annexes (modèle de score, glossaire, cadre légal)" }
+  );
   const tocHtml = showToc
     ? `<nav class="toc" aria-label="Sommaire">
     <div class="toc-title">Sommaire</div>
@@ -1173,6 +1559,42 @@ function renderAssetsHtmlReport({ job, filter, assets, stats, branding = BRANDIN
   .expscore { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--navy); }
   .expbar { width: 72px; height: 5px; border-radius: 3px; background: #E8EDF6; margin-top: 3px; overflow: hidden; }
   .expbar span { display: block; height: 100%; border-radius: 3px; }
+  /* ── BLUF decision summary ── */
+  .bluf { border-radius: 14px; padding: 22px 24px; margin: 4px 0 26px; color: #EAF2FF; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+  .bluf::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 5px; background: var(--grad-severity); }
+  .bluf-crit { background: linear-gradient(135deg, #2A0E14 0%, #5A1722 55%, #8C2230 100%); }
+  .bluf-high { background: linear-gradient(135deg, #2A1606 0%, #6B3A0E 60%, #9A5414 100%); }
+  .bluf-med  { background: linear-gradient(135deg, #2A2406 0%, #5E5210 60%, #897711 100%); color: #1A1404; }
+  .bluf-low  { background: linear-gradient(135deg, #0B1F16 0%, #143A2A 60%, #1C6B49 100%); }
+  .bluf-head { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .bluf-posture { flex: 0 0 auto; }
+  .bluf-plabel { display: block; font-size: 10.5px; letter-spacing: 1.6px; text-transform: uppercase; opacity: 0.82; font-weight: 600; }
+  .bluf-pval { font-family: var(--display); font-size: 32px; font-weight: 700; line-height: 1.05; letter-spacing: 0.4px; }
+  .bluf-verdict { flex: 1 1 320px; margin: 2px 0 0; font-size: 14px; line-height: 1.5; font-weight: 500; align-self: center; }
+  .bluf-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+  .bluf-metric { background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: 9px; padding: 12px 14px; }
+  .bluf-med .bluf-metric { background: rgba(0,0,0,0.08); border-color: rgba(0,0,0,0.12); }
+  .bm-val { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1; }
+  .bm-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.85; margin-top: 5px; }
+  .bm-crit .bm-val { color: #FFB3BB; } .bluf-med .bm-crit .bm-val { color: #B81F2E; }
+  .bm-high .bm-val { color: #FFD9A8; } .bluf-med .bm-high .bm-val { color: #8A5410; }
+  .bm-ok .bm-val { color: #B7F5D6; } .bluf-med .bm-ok .bm-val { color: #1C6B49; }
+  .bluf-now { margin-top: 16px; padding: 12px 14px; border-radius: 9px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.16); display: flex; gap: 12px; align-items: baseline; font-size: 13px; line-height: 1.45; }
+  .bluf-med .bluf-now { background: rgba(0,0,0,0.10); }
+  .bluf-now-tag { flex: 0 0 auto; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  /* ── Prioritized action plan ── */
+  table.actplan td { vertical-align: top; }
+  .actplan .prio { width: 30px; text-align: center; }
+  .prio-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-family: var(--display); font-weight: 700; font-size: 12px; }
+  .act { margin: 0 0 5px; font-size: 12px; line-height: 1.45; }
+  .act:last-child { margin-bottom: 0; }
+  .act-k { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 700; color: #fff; margin-right: 5px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .act-critical { background: #E63946; } .act-high { background: #FB8B24; } .act-medium { background: #C99A06; } .act-low { background: #5A6B86; }
+  .ublob { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .ublob-critical { background: #FDE2E5; color: #B81F2E; border: 1px solid #F5B5BC; }
+  .ublob-high { background: #FDEBD6; color: #9A5414; border: 1px solid #F3CFA0; }
+  .ublob-medium { background: #FBF4D2; color: #897711; border: 1px solid #EFE39A; }
+  .ublob-low { background: #E6FaF0; color: #1C6B49; border: 1px solid #B7E8CE; }
   .cvelink { font-weight: 700; text-decoration: none; }
   .cvelink:hover { text-decoration: underline; }
   .cvesec { margin: 18px 0 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); page-break-inside: avoid; }
@@ -1193,6 +1615,37 @@ function renderAssetsHtmlReport({ job, filter, assets, stats, branding = BRANDIN
   .toc-title { font-family: var(--display); font-size: 13px; color: var(--navy); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.2px; }
   .toc ol { margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.8; }
   .toc a { color: var(--accent); text-decoration: none; }
+  /* ── Introduction ── */
+  .intro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 8px 0 4px; }
+  .intro-card { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; background: var(--panel); }
+  .intro-card h3 { margin: 0 0 8px; font-family: var(--display); font-size: 13.5px; color: var(--navy); }
+  .intro-card p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink); }
+  .legend-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  /* ── Per-asset fiches ── */
+  .fiche { border: 1px solid var(--line); border-left: 5px solid var(--accent); border-radius: 11px; padding: 0 18px 16px; margin: 18px 0; page-break-inside: avoid; }
+  .fiche-head { display: flex; align-items: center; gap: 14px; margin: 0 -18px 12px; padding: 14px 18px; border-radius: 6px 6px 0 0; border-bottom: 1px solid var(--line); }
+  .fiche-prio { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-family: var(--display); font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; }
+  .fiche-head-main { flex: 1 1 auto; }
+  .fiche-head-main h3 { margin: 0 0 4px; font-family: var(--display); font-size: 16px; color: var(--navy); }
+  .fiche-score { flex: 0 0 auto; font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1; }
+  .fiche-desc { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+  .fiche-meta { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 5px 14px; margin: 0 0 14px; font-size: 12px; align-items: baseline; }
+  .fiche-meta-k { color: var(--muted); text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px; }
+  .fiche-meta-v { color: var(--ink); }
+  .fiche h4 { font-family: var(--display); font-size: 13px; color: var(--navy); margin: 16px 0 7px; }
+  table.svctab { background: #fff; }
+  table.svctab td { vertical-align: top; }
+  .wt { display: inline-block; min-width: 26px; text-align: center; padding: 1px 6px; border-radius: 5px; font-weight: 700; font-size: 11px; }
+  .wt-crit { background: #FDE2E5; color: #B81F2E; }
+  .wt-high { background: #FDEBD6; color: #9A5414; }
+  .wt-med { background: #EEF3FB; color: #5A6B86; }
+  .wt-low { background: #F1F5FB; color: #94a3b8; }
+  ul.actlist { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.7; }
+  ul.actlist li { margin-bottom: 4px; }
+  table.gloss { margin: 4px 0 16px; }
+  table.gloss th { width: 190px; }
   @media print {
     body { background: white; }
     .content { padding: 0 16px; }
@@ -1221,14 +1674,24 @@ ${primaryOverride}
 
   <div class="content">
   <div class="toolbar no-print">
-    <button class="btn btn-primary" onclick="window.print()">📄 Imprimer / Enregistrer en PDF</button>
-    <span style="font-size:11px;color:#5A6B86;align-self:center">Astuce: Ctrl+P → "Enregistrer en PDF"</span>
+    <button class="btn btn-primary" onclick="window.print()">📄 Enregistrer au format PDF (Ctrl+P)</button>
+    <span style="font-size:11px;color:#5A6B86;align-self:center">Dans la fenêtre d'impression, choisissez la destination « Enregistrer au format PDF ».</span>
   </div>
+  <div class="no-print" style="margin:0 0 16px;padding:10px 14px;border:1px solid #F3C9A0;background:#FFF7EC;border-radius:8px;font-size:12px;color:#7A4E12;line-height:1.6">
+    ⚠️ <strong>Pour un PDF valide</strong>, sélectionnez la destination <strong>« Enregistrer au format PDF »</strong> (moteur du navigateur).
+    Évitez <strong>« Microsoft Print to PDF »</strong> : ce pilote produit des en-têtes d'objets non conformes que les lecteurs stricts (Adobe, aperçu Windows) refusent d'ouvrir.
+  </div>
+
+  ${blufHtml}
+
+  ${actionPlanHtml}
 
   ${tocHtml}
 
+  ${introHtml}
+
   <section>
-    <h2 id="sec-summary">Synthèse</h2>
+    <h2 id="sec-summary">Indicateurs clés</h2>
     <div class="kpis">
       <div class="kpi"><div class="kpi-label">Total actifs</div><div class="kpi-value">${stats.total}</div></div>
       <div class="kpi"><div class="kpi-label">Criticité critique</div><div class="kpi-value" style="color:#E63946">${stats.byCriticality.critical}</div></div>
@@ -1274,13 +1737,11 @@ ${primaryOverride}
     <tbody>${rowsHtml || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px">Aucun actif ne correspond aux filtres.</td></tr>'}</tbody>
   </table>
 
-  ${
-    cveSectionsHtml
-      ? `<h2 id="sec-cves">Vulnérabilités détectées par actif</h2>
-  <p class="muted" style="margin:-4px 0 14px">Chaque CVE est cliquable et ouvre sa fiche détaillée sur la base NVD (nvd.nist.gov).</p>
-  ${cveSectionsHtml}`
-      : ""
-  }
+  <h2 id="sec-fiches">Fiches détaillées par actif (${assets.length})</h2>
+  <p class="muted" style="margin:-4px 0 14px">Une fiche par actif, classées par exposition décroissante. Chaque fiche documente les services ouverts, les remédiations prioritaires, le plan d'action et les CVE corrélées (cliquables vers la base NVD).</p>
+  ${fichesHtml || '<p class="muted">Aucun actif à détailler.</p>'}
+
+  ${annexHtml}
 
   <footer>
     <div class="accentrule"></div>
@@ -1440,7 +1901,7 @@ async function generateReport(job) {
   } else if (job.format === ReportFormat.CSV) {
     fs.writeFileSync(filepath, renderCsv(cves), "utf8");
   } else {
-    // ReportFormat.PDF — we emit a print-ready HTML.
+    // ReportFormat.PDF - we emit a print-ready HTML.
     // Users click "Enregistrer en PDF" from the browser; no binary PDF needed.
     const branding = await loadBranding();
     fs.writeFileSync(filepath, renderHtmlReport({ job, filter, cves, stats, branding }), "utf8");
@@ -1503,7 +1964,7 @@ async function drainQueuedReportJobs() {
 /**
  * Returns true when the operator has paused scheduled syncs via the HTTP
  * endpoint (which drops a marker file on the shared volume). Manually
- * enqueued SyncJobs (via the trigger endpoint) still run — pause only
+ * enqueued SyncJobs (via the trigger endpoint) still run - pause only
  * affects the *schedule*.
  */
 function isSyncPaused() {
@@ -1516,7 +1977,7 @@ function isSyncPaused() {
 
 async function maybeRunScheduledSyncs() {
   if (!NVD_ENABLED) return;
-  if (isSyncPaused()) return; // operator-paused — silently skip schedule
+  if (isSyncPaused()) return; // operator-paused - silently skip schedule
   const now = Date.now();
 
   if (now - lastRun.fullSync >= NVD_FULL_SYNC_INTERVAL_MS) {
@@ -1555,7 +2016,7 @@ async function main() {
       `auto_sync=${NVD_ENABLED}`
   );
 
-  // Initial sync at boot — delta if we have prior runs, full if first boot.
+  // Initial sync at boot - delta if we have prior runs, full if first boot.
   // Honor the pause marker so a restart while paused doesn't kick off a sync.
   if (NVD_ENABLED && !isSyncPaused()) {
     const lastJob = await prisma.syncJob.findFirst({
@@ -1585,10 +2046,24 @@ async function main() {
   setInterval(tick, POLL_INTERVAL_MS);
 }
 
-main().catch((e) => {
-  err("Fatal error:", e);
-  process.exit(1);
-});
+// Only auto-start the worker loop when run directly (`node worker.js`); when the
+// module is required (tests / render harness) the renderers are exported instead.
+if (require.main === module) {
+  main().catch((e) => {
+    err("Fatal error:", e);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  renderAssetsHtmlReport,
+  renderHtmlReport,
+  renderAssetsCsv,
+  renderCsv,
+  computeAssetBluf,
+  assetRecommendedActions,
+  aggregateAssetStats,
+};
 
 // ─── Graceful shutdown ───────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@
  * The sync/cpe ingest path derives criticality from *services only* (CVE
  * matches aren't known yet at push time). After running match_cve.js to
  * populate ProductCVE links, run this once to fold the matched-CVE severities
- * into each asset's stored criticality — and to backfill assets that were
+ * into each asset's stored criticality - and to backfill assets that were
  * ingested back when everything was a flat "medium".
  *
  *   docker exec cve-tracker-worker-dev node backend/scripts/recompute_exposure.js
@@ -57,7 +57,7 @@ async function main() {
       changed++;
     }
   }
-  console.log(`done — ${changed} asset(s) ${DRY_RUN ? "would change" : "updated"}.`);
+  console.log(`done - ${changed} asset(s) ${DRY_RUN ? "would change" : "updated"}.`);
 }
 
 main()

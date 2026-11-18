@@ -110,7 +110,7 @@
   --shadow-md: 0 8px 20px -12px color-mix(in oklch, var(--primary) 45%, transparent);
   --shadow-glow: 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent), 0 10px 30px -15px color-mix(in oklch, var(--accent) 40%, transparent);
 
-  /* Charte graphique — gradients de marque (4 directions) */
+  /* Charte graphique - gradients de marque (4 directions) */
   --grad-severity: linear-gradient(90deg, #3DDC84 0%, #FFD166 50%, #E63946 100%);
   --grad-warm: linear-gradient(100deg, #FFD166 0%, #FB8B24 52%, #E63946 100%);
   --grad-proactive: linear-gradient(155deg, #0B1220 0%, #3DDC84 58%, #4DA8FF 100%);
@@ -232,7 +232,7 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 
-  /* Charte graphique — surfaces & accents dégradés */
+  /* Charte graphique - surfaces & accents dégradés */
   .grad-severity {
     background: var(--grad-severity);
   }
@@ -249,14 +249,14 @@
     background: var(--grad-accent);
   }
 
-  /* Dir 1 — filet "Rampe de Sévérité" sous les titres de page */
+  /* Dir 1 - filet "Rampe de Sévérité" sous les titres de page */
   .accent-rule {
     height: 3px;
     border-radius: 999px;
     background: var(--grad-severity);
   }
 
-  /* Dir 2 — texte "Danger Graduel" pour les valeurs critiques */
+  /* Dir 2 - texte "Danger Graduel" pour les valeurs critiques */
   .text-grad-warm {
     background: var(--grad-warm);
     -webkit-background-clip: text;
@@ -265,7 +265,7 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Dir 3 — liseré "Sécurité Proactive" en tête de carte */
+  /* Dir 3 - liseré "Sécurité Proactive" en tête de carte */
   .proactive-top {
     position: relative;
     overflow: hidden;
@@ -280,7 +280,7 @@
     opacity: 0.95;
   }
 
-  /* Dir 4 — accent bleu→rouge */
+  /* Dir 4 - accent bleu→rouge */
   .accent-rule-4 {
     height: 3px;
     border-radius: 999px;

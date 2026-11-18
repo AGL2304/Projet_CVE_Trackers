@@ -23,9 +23,9 @@ function getSecret(): string {
         "[admin-auth] ADMIN_AUTH_SECRET (or NEXTAUTH_SECRET) is required in production"
       );
     }
-    // Dev fallback only — never used in production
+    // Dev fallback only - never used in production
     console.warn(
-      "[admin-auth] Using insecure DEV secret — set ADMIN_AUTH_SECRET in .env for any real deployment"
+      "[admin-auth] Using insecure DEV secret - set ADMIN_AUTH_SECRET in .env for any real deployment"
     );
     return DEV_SECRET;
   }
@@ -33,7 +33,7 @@ function getSecret(): string {
     if (IS_PROD) {
       throw new Error("[admin-auth] ADMIN_AUTH_SECRET must be at least 32 chars in production");
     }
-    console.warn("[admin-auth] ADMIN_AUTH_SECRET is shorter than 32 chars — use a longer one");
+    console.warn("[admin-auth] ADMIN_AUTH_SECRET is shorter than 32 chars - use a longer one");
   }
   return secret;
 }
@@ -45,7 +45,7 @@ function getAdminPassword(): string {
       throw new Error("[admin-auth] ADMIN_PASSWORD is required in production");
     }
     console.warn(
-      "[admin-auth] Using default DEV admin password — set ADMIN_PASSWORD in .env for any real deployment"
+      "[admin-auth] Using default DEV admin password - set ADMIN_PASSWORD in .env for any real deployment"
     );
     return DEV_ADMIN_PASSWORD;
   }

@@ -86,6 +86,7 @@ type CmdbSyncResponse = {
   ok: boolean;
   created: number;
   updated: number;
+  failed?: number;
   rawCount: number;
   mappedCount: number;
   lastSyncAt: string | null;
@@ -313,7 +314,7 @@ const copy = {
     nvdTriggerDelta: "Trigger delta sync",
     nvdTriggerFull: "Trigger full sync",
     nvdTriggering: "Starting...",
-    nvdTriggered: "Sync queued — the worker will pick it up",
+    nvdTriggered: "Sync queued - the worker will pick it up",
     nvdTriggerError: "Trigger failed",
     nvdRecentJobs: "Recent runs",
     nvdPause: "Pause auto-sync",
@@ -443,7 +444,7 @@ export default function SettingsPage() {
       const status = await fetchJson<ScrapingStatus>("/api/admin/scraping/status");
       setScrapingStatus(status);
     } catch {
-      // silent — surfaced via UI state instead
+      // silent - surfaced via UI state instead
       setScrapingStatus(null);
     }
   }, []);
@@ -606,9 +607,11 @@ export default function SettingsPage() {
         message: result.message,
       });
 
+      const failedSuffix = result.failed ? ` / ${result.failed} failed` : "";
       toast({
-        title: t.cmdbSyncSuccess,
-        description: `${result.created} created / ${result.updated} updated`,
+        title: result.ok ? t.cmdbSyncSuccess : t.cmdbSyncError,
+        description: `${result.created} created / ${result.updated} updated${failedSuffix}`,
+        variant: result.ok ? undefined : "destructive",
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : t.cmdbSyncError;

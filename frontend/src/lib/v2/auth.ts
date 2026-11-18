@@ -18,7 +18,7 @@ const SYSTEM_ACTOR: ActorContext = {
 // Trusted upstream service (Network Scanner Pro, SIEM Léger) authenticated
 // solely via the X-Internal-Auth shared secret, with no x-user-* identity.
 // Granted the API role so service-to-service endpoints (e.g. /api/v2/sync/cpe)
-// accept it. Its id is a pseudo-actor — see audit.ts PSEUDO_ACTOR_IDS.
+// accept it. Its id is a pseudo-actor - see audit.ts PSEUDO_ACTOR_IDS.
 const SERVICE_ACTOR: ActorContext = {
   id: "service",
   email: "service@local",

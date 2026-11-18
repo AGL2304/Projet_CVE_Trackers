@@ -80,7 +80,7 @@ function getRedis(): RedisLike | null {
     return redisState.__cveTrackerRedis;
   } catch (e) {
     console.warn(
-      "[rate-limit] REDIS_URL set but 'ioredis' not installed — using in-memory rate limiting. " +
+      "[rate-limit] REDIS_URL set but 'ioredis' not installed - using in-memory rate limiting. " +
         "Install ioredis (`npm i ioredis`) for distributed rate limiting."
     );
     redisState.__cveTrackerRedis = null;
@@ -129,7 +129,7 @@ export function applyRateLimit(
   const key = buildKey(request);
   const now = Date.now();
 
-  // Try Redis first — but the public API stays synchronous to keep
+  // Try Redis first - but the public API stays synchronous to keep
   // backward compatibility with existing callers. We schedule the Redis
   // op fire-and-forget and use in-memory as the source of truth on the
   // critical path. Redis acts as a cross-instance reconciliation channel.
@@ -153,7 +153,7 @@ export function applyRateLimit(
 }
 
 /**
- * Async variant — fully Redis-backed when REDIS_URL is configured.
+ * Async variant - fully Redis-backed when REDIS_URL is configured.
  * Use this in new routes when you want true distributed enforcement.
  */
 export async function applyRateLimitAsync(

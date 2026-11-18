@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 /**
- * Exposure scoring (CommonJS) — shared by the report worker and the
+ * Exposure scoring (CommonJS) - shared by the report worker and the
  * recompute/backfill script. This is the JS twin of
  * frontend/src/lib/v2/exposure.ts (used by the sync/cpe ingest path). The two
  * must be kept in sync by hand: same weights, same thresholds.
@@ -38,6 +38,25 @@ const DANGEROUS_SERVICES = {
   443: { label: "HTTPS", weight: 4 },
   22: { label: "SSH", weight: 6 },
   7547: { label: "TR-069 CWMP", weight: 14 },
+  // Legacy Unix / lab-grade services - rare on a modern LAN and almost always
+  // directly exploitable when open (cleartext remote exec, unauthenticated
+  // exports, deserialization RCE). Kept BYTE-FOR-BYTE in sync (ports + weights)
+  // with frontend/src/lib/v2/exposure.ts and the scanner's app.js table.
+  2049: { label: "NFS", weight: 22 },
+  111: { label: "rpcbind", weight: 8 },
+  512: { label: "rexec", weight: 20 },
+  513: { label: "rlogin", weight: 20 },
+  514: { label: "rsh", weight: 20 },
+  1099: { label: "Java RMI", weight: 20 },
+  3632: { label: "distccd", weight: 24 },
+  8009: { label: "AJP (Ghostcat)", weight: 18 },
+  8180: { label: "Tomcat", weight: 8 },
+  6000: { label: "X11", weight: 16 },
+  8787: { label: "Ruby DRb", weight: 18 },
+  2121: { label: "FTP-alt", weight: 14 },
+  1524: { label: "ingreslock", weight: 16 },
+  6667: { label: "IRC", weight: 10 },
+  6697: { label: "IRC (TLS)", weight: 10 },
 };
 
 function criticalityFromScore(score) {

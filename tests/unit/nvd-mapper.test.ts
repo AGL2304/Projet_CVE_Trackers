@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Mock prisma to avoid actually hitting a DB — we only test the mapping logic
+// Mock prisma to avoid actually hitting a DB - we only test the mapping logic
 vi.mock("@/lib/db", () => ({
   db: {
     cVE: {
@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-describe("nvd-sync — upsertNvdCve mapping", () => {
+describe("nvd-sync - upsertNvdCve mapping", () => {
   it("maps a CVSS v3.1 NVD entry to the expected DB row shape", async () => {
     const { upsertNvdCve } = await import("@/lib/nvd-sync");
     const { db } = await import("@/lib/db");

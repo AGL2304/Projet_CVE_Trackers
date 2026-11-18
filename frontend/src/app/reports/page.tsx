@@ -82,7 +82,7 @@ const copy = {
   fr: {
     title: "Rapports CVE",
     description:
-      "Génère un rapport complet (PDF imprimable, CSV ou JSON) à partir de la base CVE — avec filtres avancés et téléchargement",
+      "Génère un rapport complet (PDF imprimable, CSV ou JSON) à partir de la base CVE - avec filtres avancés et téléchargement",
     presets: "Préréglages",
     presetCritical: "Toutes les CVE critiques",
     presetCritical7d: "Critiques + élevées (7 j)",
@@ -113,7 +113,7 @@ const copy = {
     limit: "Limite",
     generate: "Générer le rapport",
     generating: "Mise en file...",
-    queued: "Rapport mis en file — le worker le traitera dans les ~15 s.",
+    queued: "Rapport mis en file - le worker le traitera dans les ~15 s.",
     listTitle: "Rapports récents",
     refresh: "Rafraîchir",
     columns: {
@@ -134,7 +134,7 @@ const copy = {
   en: {
     title: "CVE reports",
     description:
-      "Generate a complete report (printable PDF, CSV or JSON) from the CVE database — with advanced filters and download",
+      "Generate a complete report (printable PDF, CSV or JSON) from the CVE database - with advanced filters and download",
     presets: "Presets",
     presetCritical: "All critical CVEs",
     presetCritical7d: "Critical + high (7 d)",
@@ -165,7 +165,7 @@ const copy = {
     limit: "Limit",
     generate: "Generate report",
     generating: "Queuing...",
-    queued: "Report queued — the worker will pick it up within ~15s.",
+    queued: "Report queued - the worker will pick it up within ~15s.",
     listTitle: "Recent reports",
     refresh: "Refresh",
     columns: {
@@ -207,7 +207,7 @@ function statusColor(status: string) {
 }
 
 function summarizeFilter(filter: Record<string, unknown> | null): string {
-  if (!filter || Object.keys(filter).length === 0) return "—";
+  if (!filter || Object.keys(filter).length === 0) return "-";
   const parts: string[] = [];
   if (filter.scope === "assets") {
     parts.push("scope:actifs");
@@ -224,7 +224,7 @@ function summarizeFilter(filter: Record<string, unknown> | null): string {
   if (filter.dateTo) parts.push(`to:${String(filter.dateTo).slice(0, 10)}`);
   if (typeof filter.minCvss === "number") parts.push(`cvss≥${filter.minCvss}`);
   if (filter.search) parts.push(`q:"${String(filter.search).slice(0, 30)}"`);
-  return parts.length > 0 ? parts.join(" · ") : "—";
+  return parts.length > 0 ? parts.join(" · ") : "-";
 }
 
 export default function ReportsPage() {
@@ -542,7 +542,7 @@ export default function ReportsPage() {
                             <SelectContent>
                               {ASSET_CRITICALITIES.map((c) => (
                                 <SelectItem key={c} value={c}>
-                                  {c === "all" ? "— (tous)" : c}
+                                  {c === "all" ? "- (tous)" : c}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -563,7 +563,7 @@ export default function ReportsPage() {
                             <SelectContent>
                               {ASSET_STATUSES.map((s) => (
                                 <SelectItem key={s} value={s}>
-                                  {s === "all" ? "— (tous)" : s}
+                                  {s === "all" ? "- (tous)" : s}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -694,7 +694,7 @@ export default function ReportsPage() {
                               </a>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">-</span>
                           )}
                         </TableCell>
                       </TableRow>

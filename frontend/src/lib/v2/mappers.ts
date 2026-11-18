@@ -1,4 +1,5 @@
 import type { CVE, Severity } from "@prisma/client";
+import { extractPatchRefs } from "@/lib/cve-helpers";
 
 export function mapCveToJsonApiResource(cve: CVE) {
   return {
@@ -32,6 +33,7 @@ export function mapCveToJsonApiResource(cve: CVE) {
 }
 
 export function mapCveToLegacy(cve: CVE) {
+  const { hasPatch, links } = extractPatchRefs(cve.rawData);
   return {
     id: cve.id,
     cveId: cve.cveId,
@@ -44,6 +46,13 @@ export function mapCveToLegacy(cve: CVE) {
     lastModifiedDate: cve.lastModifiedDate ?? cve.modifiedAt ?? null,
     references: cve.references,
     vulnStatus: cve.vulnStatus ?? cve.status,
+    // Remediation workflow status (NEW/ANALYZING/.../REMEDIATED), distinct from
+    // the NVD lifecycle string above - this one is ours to set via the "mark
+    // as remediated" action.
+    cveStatus: cve.status,
+    dbVersion: cve.version,
+    hasPatch,
+    patchRefs: links,
     importedAt: cve.importedAt,
     createdAt: cve.createdAt,
     updatedAt: cve.updatedAt,

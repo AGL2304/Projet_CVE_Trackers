@@ -38,7 +38,7 @@ const serviceSchema = z.object({
   // CPE is now OPTIONAL: a discovered service may have an open port but no
   // fingerprinted product (e.g. a phone's stray port, an IoT device). Such
   // services are still recorded on the asset so the inventory reflects every
-  // open port — they just don't create a Product / CVE match.
+  // open port - they just don't create a Product / CVE match.
   cpe: z.string().regex(cpeRegex, "CPE 2.3 invalide").optional().nullable(),
   port: z.number().int().min(1).max(65535).optional().nullable(),
   protocol: z.enum(["tcp", "udp"]).optional().nullable(),
@@ -71,7 +71,7 @@ type SyncCpePayload = z.infer<typeof syncCpeSchema>;
 
 /**
  * Parse a CPE 2.3 string into a (vendor, product, version) triple usable
- * for Product.create. We keep this lenient — wfn-strict parsing isn't
+ * for Product.create. We keep this lenient - wfn-strict parsing isn't
  * worth the complexity here.
  */
 function parseCpe(cpe: string): { vendor: string; product: string; version: string | null } {
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join(" · ") || null;
 
-    // Normalize the full service list for storage on the asset — every open
+    // Normalize the full service list for storage on the asset - every open
     // port and any fingerprint, independent of whether a CPE was identified.
     const servicesJson: Prisma.InputJsonValue = payload.services
       .map((s) => ({

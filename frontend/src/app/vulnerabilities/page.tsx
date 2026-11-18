@@ -96,7 +96,7 @@ type Vulnerability = {
 const copy = {
   fr: {
     title: "Vulnérabilités",
-    description: "Backlog opérationnel — suivi, remédiation et SLA",
+    description: "Backlog opérationnel - suivi, remédiation et SLA",
     newVuln: "Nouvelle vulnérabilité",
     createVuln: "Créer une vulnérabilité",
     editVuln: "Modifier la vulnérabilité",
@@ -141,13 +141,13 @@ const copy = {
     cve: "CVE",
     cvss: "CVSS",
     linkedAsset: "Asset lié",
-    none2: "—",
+    none2: "-",
     daysOpen: "j ouvert",
     sortHint: "Cliquez sur une ligne pour modifier",
   },
   en: {
     title: "Vulnerabilities",
-    description: "Operational backlog — tracking, remediation and SLA",
+    description: "Operational backlog - tracking, remediation and SLA",
     newVuln: "New vulnerability",
     createVuln: "Create vulnerability",
     editVuln: "Edit vulnerability",
@@ -192,7 +192,7 @@ const copy = {
     cve: "CVE",
     cvss: "CVSS",
     linkedAsset: "Linked asset",
-    none2: "—",
+    none2: "-",
     daysOpen: "d open",
     sortHint: "Click a row to edit",
   },
@@ -647,9 +647,9 @@ export default function VulnerabilitiesPage() {
           {items.length === 0 ? (
             <EmptyState title={t.noResultsTitle} description={t.noResultsDesc} />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-44rem)] min-h-[200px] overflow-auto rounded-md border">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-card">
                   <TableRow>
                     <TableHead>{t.titleCol}</TableHead>
                     <TableHead>{t.severityCol}</TableHead>
@@ -678,7 +678,7 @@ export default function VulnerabilitiesPage() {
                           <SeverityBadge value={item.severity} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {item.cvssScore != null ? item.cvssScore.toFixed(1) : "—"}
+                          {item.cvssScore != null ? item.cvssScore.toFixed(1) : "-"}
                         </TableCell>
                         <TableCell>
                           {item.cveId ? (

@@ -25,8 +25,8 @@ Le projet contient 2 familles d'API:
 - Gestion CVE: recherche avancee, filtres, import NVD, vues table/cards/timeline, export CSV/JSON/PDF.
 - Fiche detail CVE: infos techniques, references, calculateur CVSS, commentaires internes (localStorage), remediation.
 - Gestion des vulnerabilites (CRUD v1 + mise a jour de statut).
-- Gestion des assets (CRUD, import CSV, visualisation exposition, synchronisation CMDB).
-- Reporting (templates, constructeur drag-and-drop, export PDF, planification UI).
+- Gestion des assets (CRUD, import CSV, visualisation exposition, synchronisation CMDB idempotente et durcie).
+- Reporting (templates, constructeur drag-and-drop, export PDF, planification UI) ; le rapport d'inventaire d'actifs s'ouvre sur une synthese decisionnelle **BLUF** (posture, action immediate, plan d'action priorise par exposition).
 - Administration:
   - login/logout/session admin par cookie signe (SameSite=Strict),
   - settings applicatifs (langue, NVD key, CMDB, webhook),
@@ -39,8 +39,8 @@ Le projet contient 2 familles d'API:
 
 Le worker (`backend/scripts/worker.js`) tourne en continu et alimente la base CVE depuis le flux officiel NVD :
 
-- **Delta sync** toutes les `NVD_DELTA_INTERVAL_MS` (defaut 15 min) — recupere uniquement les CVE modifiees depuis la derniere passe.
-- **Full sync** toutes les `NVD_FULL_SYNC_INTERVAL_MS` (defaut 24 h) — repagine l'ensemble du flux pour rattrapage.
+- **Delta sync** toutes les `NVD_DELTA_INTERVAL_MS` (defaut 15 min) - recupere uniquement les CVE modifiees depuis la derniere passe.
+- **Full sync** toutes les `NVD_FULL_SYNC_INTERVAL_MS` (defaut 24 h) - repagine l'ensemble du flux pour rattrapage.
 - Au boot : delta sync depuis la derniere completion connue, sinon full sync borne (`NVD_BOOT_MAX_RECORDS`).
 - Respect du rate limit NVD : 6.5 s entre pages sans cle API, 0.6 s avec cle (`NVD_API_KEY`).
 - Retry exponentiel sur 429 / 5xx (jusqu'a 4 tentatives par page).
@@ -270,7 +270,7 @@ Script smoke test PowerShell:
 
 ## 12) Points d'attention
 
-- Le worker (`backend/scripts/worker.js`) implemente actuellement un traitement simplifie des jobs (passage QUEUED -> RUNNING -> COMPLETED).
+- Le worker (`backend/scripts/worker.js`) effectue un scraping NVD reel (fetch pagine, retry exponentiel sur 429/5xx, respect du rate limit) ainsi que la generation des rapports ; voir la section « Scraping NVD automatique ».
 - Plusieurs fonctions "reporting PDF" cote UI utilisent la fonction d'impression du navigateur (pas de moteur PDF backend dedie).
 - Le rate limit v2 est en memoire process (pas distribue).
 - Les commentaires de fiche CVE sont stockes en `localStorage` cote client.

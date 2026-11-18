@@ -9,7 +9,7 @@ import { jsonApiError, jsonApiResponse } from "@/lib/v2/jsonapi";
  *
  * Returns a daily-binned CVE count series ready for a calendar heatmap.
  *
- * Aggregation is done in SQL so it scales — a naive fetch-all-CVEs approach
+ * Aggregation is done in SQL so it scales - a naive fetch-all-CVEs approach
  * would not survive a 100k+ CVE table.
  *
  * Response shape:

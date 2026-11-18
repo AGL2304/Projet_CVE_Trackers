@@ -1,4 +1,4 @@
-# ADR-0001 — Stratégie d'intégration CVE Tracker / Scanner / SIEM
+# ADR-0001 - Stratégie d'intégration CVE Tracker / Scanner / SIEM
 
 **Statut** : accepté
 **Date** : 2026-05-22
@@ -14,22 +14,22 @@ CVE Tracker est déjà déployé et opérationnel. Deux projets complémentaires
 
 ## Décision
 
-### D1 — CVE Tracker reste la source de vérité « inventaire + vulnérabilités »
+### D1 - CVE Tracker reste la source de vérité « inventaire + vulnérabilités »
 
 Le schéma Prisma actuel a déjà les modèles nécessaires : `Asset`, `Product` (avec champ `cpe`), `AssetProduct`, `ProductCVE`. Pas de duplication de cet inventaire dans le Scanner ou le SIEM. Le Scanner **pousse** des assets vers CVE Tracker via HTTP. Le SIEM **lit** ces assets via HTTP.
 
-### D2 — Bus d'événements minimal en HTTP webhooks, pas de Kafka
+### D2 - Bus d'événements minimal en HTTP webhooks, pas de Kafka
 
 Volumétrie cible : quelques dizaines d'événements par minute aux pires moments (publication d'un lot de CVE, fin de scan). Un bus message complet est disproportionné pour ce volume. CVE Tracker publie via webhooks signés HMAC ; les abonnés s'enregistrent via une API admin. Cette décision sera réévaluée si on dépasse > 1000 événements/seconde de manière soutenue.
 
-### D3 — Auth inter-services par clé d'API partagée + rotation manuelle
+### D3 - Auth inter-services par clé d'API partagée + rotation manuelle
 
 OAuth2 entre 3 services internes serait sur-ingénié. On utilise :
 - Un en-tête `X-Internal-Auth` portant un secret partagé (déjà supporté par `frontend/src/lib/v2/auth.ts`).
 - Une clé par paire de services (Scanner→Tracker, SIEM→Tracker), rotables indépendamment.
 - Stockage dans `.env` et secrets Docker, jamais dans le code.
 
-### D4 — Bases de données séparées sur la même instance Postgres
+### D4 - Bases de données séparées sur la même instance Postgres
 
 Pas de schéma partagé entre les trois apps (couplage trop fort). Trois bases logiques : `cve_tracker`, `network_scanner`, `siem`. Cela permet de :
 - garder les schémas Prisma de CVE Tracker propres ;
@@ -38,21 +38,21 @@ Pas de schéma partagé entre les trois apps (couplage trop fort). Trois bases l
 
 Les communications inter-bases passent **uniquement par HTTP**, jamais par requêtes SQL cross-database.
 
-### D5 — Elasticsearch partagé avec préfixes d'index
+### D5 - Elasticsearch partagé avec préfixes d'index
 
 Une seule instance ES dans la stack (`elastic-data` déjà provisionné). Les index sont préfixés :
 - `cve-tracker-*` pour les exports CVE indexés (recherche full-text).
 - `siem-events-*` et `siem-alerts-*` pour le SIEM.
 - `scanner-history-*` pour les diff inter-scans.
 
-### D6 — Format d'événements ECS (Elastic Common Schema)
+### D6 - Format d'événements ECS (Elastic Common Schema)
 
 Le SIEM produira nativement de l'ECS. CVE Tracker émet ses webhooks au format ECS étendu pour permettre une corrélation directe :
 - `event.kind` = `state`
 - `event.category` = `vulnerability` | `host`
 - `event.action` = `cve.created` | `cve.severity.changed` | `asset.created`
 
-### D7 — Pas de duplication d'auth utilisateur
+### D7 - Pas de duplication d'auth utilisateur
 
 Les trois interfaces web partagent le compte admin de CVE Tracker via un proxy d'auth. Le SIEM et le Scanner ne gèrent pas leurs propres comptes utilisateurs en v1.
 

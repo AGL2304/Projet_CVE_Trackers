@@ -10,7 +10,7 @@ import type { NextRequest } from "next/server";
  *     back).
  *  2. The client must send the same value back in the `x-csrf-token` header
  *     on every state-changing request (POST/PUT/PATCH/DELETE).
- *  3. Use `verifyCsrf(request)` in mutating admin route handlers — it
+ *  3. Use `verifyCsrf(request)` in mutating admin route handlers - it
  *     compares cookie and header in constant time, both signed with HMAC
  *     so an attacker can't forge a valid pair without the secret.
  *

@@ -1,10 +1,10 @@
 /**
- * Exposure scoring — turns an asset's open services (and, where available, its
+ * Exposure scoring - turns an asset's open services (and, where available, its
  * matched CVEs) into a single risk score and a derived criticality bucket.
  *
  * Why: the scanner always pushed assets as "medium", so criticality told you
  * nothing about real risk. A box exposing Redis + Elasticsearch + RDP + SMB is
- * obviously more dangerous than a phone with one stray port — the criticality
+ * obviously more dangerous than a phone with one stray port - the criticality
  * should say so. This module is the single source of truth for that mapping and
  * is shared by the ingest path (sync/cpe, which only knows services) and the
  * report/recompute path (which can also fold in matched CVE severities).
@@ -66,6 +66,25 @@ export const DANGEROUS_SERVICES: Record<number, { label: string; weight: number 
   443: { label: "HTTPS", weight: 4 },
   22: { label: "SSH", weight: 6 },
   7547: { label: "TR-069 CWMP (CPE mgmt)", weight: 14 },
+  // Legacy Unix / lab-grade services. These are rare on a modern LAN, and when
+  // open they are almost always directly exploitable (cleartext remote exec,
+  // unauthenticated exports, deserialization RCE), so finding one open is a
+  // strong signal - hence weights on par with the data-store tier.
+  2049: { label: "NFS (exported filesystems)", weight: 22 },
+  111: { label: "rpcbind (RPC portmapper)", weight: 8 },
+  512: { label: "rexec (cleartext remote exec)", weight: 20 },
+  513: { label: "rlogin (cleartext, trust-based)", weight: 20 },
+  514: { label: "rsh (cleartext, trust-based)", weight: 20 },
+  1099: { label: "Java RMI registry (deserialization RCE)", weight: 20 },
+  3632: { label: "distccd (distributed compiler RCE)", weight: 24 },
+  8009: { label: "AJP / Tomcat (Ghostcat)", weight: 18 },
+  8180: { label: "Tomcat (HTTP mgmt)", weight: 8 },
+  6000: { label: "X11 (screen / keystroke capture)", weight: 16 },
+  8787: { label: "Ruby DRb (remote object RCE)", weight: 18 },
+  2121: { label: "FTP-alt (cleartext)", weight: 14 },
+  1524: { label: "ingreslock (classic bind-shell port)", weight: 16 },
+  6667: { label: "IRC", weight: 10 },
+  6697: { label: "IRC (TLS)", weight: 10 },
 };
 
 /** Thresholds mapping a combined score to a criticality bucket. */

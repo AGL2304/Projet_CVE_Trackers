@@ -1,4 +1,4 @@
-# Cahier des charges — SIEM Léger & Network Scanner Pro
+# Cahier des charges - SIEM Léger & Network Scanner Pro
 
 Projets complémentaires à **CVE Tracker** formant un écosystème SOC cohérent.
 
@@ -24,7 +24,7 @@ Flux global :
 
 ---
 
-## Partie 1 — Network Scanner Pro
+## Partie 1 - Network Scanner Pro
 
 ### 1.1 Contexte & objectif
 
@@ -129,11 +129,11 @@ Aujourd'hui, l'inventaire de CVE Tracker est alimenté manuellement (CSV, CMDB t
 
 | Phase | Durée | Livrables |
 |---|---|---|
-| **P1 — Socle** | 2 sem. | API auth, modèle DB, exécution nmap pilotée, persistance. |
-| **P2 — Fingerprinting** | 2 sem. | Détection de version, calcul CPE, profils rapide/standard. |
-| **P3 — Intégration CVE Tracker** | 1 sem. | Push assets + services, endpoint de matching CPE côté CVE Tracker. |
-| **P4 — Planification & UI** | 2 sem. | Cron, dashboard, diff entre scans, exports. |
-| **P5 — Durcissement** | 1 sem. | Stealth, exclusions, audit log, healthcheck, tests. |
+| **P1 - Socle** | 2 sem. | API auth, modèle DB, exécution nmap pilotée, persistance. |
+| **P2 - Fingerprinting** | 2 sem. | Détection de version, calcul CPE, profils rapide/standard. |
+| **P3 - Intégration CVE Tracker** | 1 sem. | Push assets + services, endpoint de matching CPE côté CVE Tracker. |
+| **P4 - Planification & UI** | 2 sem. | Cron, dashboard, diff entre scans, exports. |
+| **P5 - Durcissement** | 1 sem. | Stealth, exclusions, audit log, healthcheck, tests. |
 
 ### 1.11 Critères d'acceptation
 
@@ -154,7 +154,7 @@ Aujourd'hui, l'inventaire de CVE Tracker est alimenté manuellement (CSV, CMDB t
 
 ---
 
-## Partie 2 — SIEM Léger
+## Partie 2 - SIEM Léger
 
 ### 2.1 Contexte & objectif
 
@@ -193,7 +193,7 @@ CVE Tracker dit *« cette CVE existe et touche votre serveur »*. Il ne dit pas 
 | F-SIEM-01 | Collecte syslog (UDP/TCP 514) et lecture de fichiers de logs (rotation comprise). |
 | F-SIEM-02 | Support des principaux beats (Filebeat, Winlogbeat) pour systèmes Windows et Linux. |
 | F-SIEM-03 | Normalisation systématique en ECS (mêmes noms de champs quelle que soit la source). |
-| F-SIEM-04 | Moteur de règles déclaratif (format Sigma de préférence — standard ouvert). |
+| F-SIEM-04 | Moteur de règles déclaratif (format Sigma de préférence - standard ouvert). |
 | F-SIEM-05 | Règles préchargées : brute-force SSH, élévation sudo suspecte, exécution PowerShell encodée, scan de ports détecté, accès admin Windows hors horaires. |
 | F-SIEM-06 | Corrélation par fenêtre temporelle (ex. 5 échecs de login en 60 s → alerte). |
 | F-SIEM-07 | Mapping de chaque règle à une technique MITRE ATT&CK (T1110, T1059.001, etc.). |
@@ -246,7 +246,7 @@ CVE Tracker dit *« cette CVE existe et touche votre serveur »*. Il ne dit pas 
 ### 2.7 Stack technique recommandée
 
 - **Collecte/transport** : Vector (rapide, faible footprint) ou Logstash.
-- **Stockage** : Elasticsearch (**déjà présent dans la stack CVE Tracker** — gros gain de réutilisation).
+- **Stockage** : Elasticsearch (**déjà présent dans la stack CVE Tracker** - gros gain de réutilisation).
 - **Moteur de règles** : pySigma + scheduler (Python).
 - **Frontend** : Kibana pour la recherche libre + une UI Next.js dédiée pour le triage des alertes (cohérence visuelle avec CVE Tracker).
 - **Stockage des alertes** : PostgreSQL (réutiliser l'instance de CVE Tracker).
@@ -263,25 +263,25 @@ CVE Tracker dit *« cette CVE existe et touche votre serveur »*. Il ne dit pas 
 
 ### 2.9 Intégration avec CVE Tracker
 
-**Sens 1 — Enrichissement des alertes** :
+**Sens 1 - Enrichissement des alertes** :
 À chaque alerte concernant un hôte H, le SIEM appelle `GET /api/assets?search=H` puis `GET /api/vulnerabilities?assetId=...` sur CVE Tracker. Si l'hôte a des CVE critiques ouvertes → la sévérité de l'alerte est rehaussée et un encart « contexte vulnérabilité » apparaît dans le triage.
 
-**Sens 2 — Détection ciblée** :
+**Sens 2 - Détection ciblée** :
 CVE Tracker publie un événement (webhook) « nouvelle CVE critique pour service X ». Le SIEM active automatiquement une règle Sigma spécifique pour ce service pendant N jours (chasse proactive).
 
-**Sens 3 — Boucle de remédiation** :
+**Sens 3 - Boucle de remédiation** :
 Une alerte SIEM est résolue → crée optionnellement une `Vulnerability` dans CVE Tracker liée à l'asset pour traçabilité (« exploitation tentée le ... sur cette faille »).
 
 ### 2.10 Phases & livrables
 
 | Phase | Durée | Livrables |
 |---|---|---|
-| **P1 — Pipeline** | 2 sem. | Collecte syslog + Filebeat, normalisation ECS, indexation. |
-| **P2 — Moteur de règles** | 2 sem. | Exécuteur Sigma, 10 règles de base, mapping MITRE. |
-| **P3 — Corrélation** | 1 sem. | Fenêtres glissantes, alertes multi-événements. |
-| **P4 — UI triage** | 2 sem. | Dashboard, workflow alerte, webhook, email. |
-| **P5 — Intégration CVE Tracker** | 1 sem. | Enrichissement bidirectionnel, webhook publication CVE. |
-| **P6 — Durcissement** | 1 sem. | RBAC, TLS, rétention, observabilité, tests. |
+| **P1 - Pipeline** | 2 sem. | Collecte syslog + Filebeat, normalisation ECS, indexation. |
+| **P2 - Moteur de règles** | 2 sem. | Exécuteur Sigma, 10 règles de base, mapping MITRE. |
+| **P3 - Corrélation** | 1 sem. | Fenêtres glissantes, alertes multi-événements. |
+| **P4 - UI triage** | 2 sem. | Dashboard, workflow alerte, webhook, email. |
+| **P5 - Intégration CVE Tracker** | 1 sem. | Enrichissement bidirectionnel, webhook publication CVE. |
+| **P6 - Durcissement** | 1 sem. | RBAC, TLS, rétention, observabilité, tests. |
 
 ### 2.11 Critères d'acceptation
 
@@ -302,7 +302,7 @@ Une alerte SIEM est résolue → crée optionnellement une `Vulnerability` dans 
 
 ---
 
-## Partie 3 — Vision d'ensemble
+## Partie 3 - Vision d'ensemble
 
 ### 3.1 Bénéfice combiné
 
@@ -320,7 +320,7 @@ Une alerte SIEM est résolue → crée optionnellement une `Vulnerability` dans 
 | M1 | P1–P2 | P1 | Endpoint CPE matching à ajouter |
 | M2 | P3–P4 | P2–P3 | Webhook publication CVE à ajouter |
 | M3 | P5 + recette | P4–P5 | Section « Discovery » à ajouter |
-| M4 | — | P6 + recette | Intégration finale + dashboard unifié |
+| M4 | - | P6 + recette | Intégration finale + dashboard unifié |
 
 ### 3.3 Réutilisation de la stack CVE Tracker
 
@@ -341,15 +341,15 @@ Une alerte SIEM est résolue → crée optionnellement une `Vulnerability` dans 
 
 ---
 
-## Annexe — Glossaire
+## Annexe - Glossaire
 
 | Terme | Définition |
 |---|---|
-| **CPE** | *Common Platform Enumeration* — identifiant standardisé d'un produit logiciel/matériel (ex. `cpe:2.3:a:apache:http_server:2.4.49`). Clé qui permet de relier un service détecté à sa liste de CVE. |
-| **ECS** | *Elastic Common Schema* — convention de nommage des champs de logs proposée par Elastic, devenue standard de fait. |
-| **EPS** | *Events Per Second* — métrique principale d'un SIEM. |
+| **CPE** | *Common Platform Enumeration* - identifiant standardisé d'un produit logiciel/matériel (ex. `cpe:2.3:a:apache:http_server:2.4.49`). Clé qui permet de relier un service détecté à sa liste de CVE. |
+| **ECS** | *Elastic Common Schema* - convention de nommage des champs de logs proposée par Elastic, devenue standard de fait. |
+| **EPS** | *Events Per Second* - métrique principale d'un SIEM. |
 | **MITRE ATT&CK** | Référentiel mondial des tactiques et techniques d'attaque, structuré en *kill chain* étendue. |
 | **Sigma** | Format ouvert de règles de détection portable entre SIEM. |
-| **SOAR** | *Security Orchestration, Automation, and Response* — automatisation de la réponse, hors-périmètre v1. |
+| **SOAR** | *Security Orchestration, Automation, and Response* - automatisation de la réponse, hors-périmètre v1. |
 | **Stealth scan** | Scan réseau réalisé pour minimiser les chances de détection par un IDS. |
-| **UEBA** | *User and Entity Behaviour Analytics* — détection par modélisation du comportement normal, hors-périmètre v1. |
+| **UEBA** | *User and Entity Behaviour Analytics* - détection par modélisation du comportement normal, hors-périmètre v1. |

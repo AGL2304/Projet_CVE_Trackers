@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * Lightweight webhook publisher.
  *
- * V1 — JSON-file backed subscription registry, fire-and-forget HTTP POST
+ * V1 - JSON-file backed subscription registry, fire-and-forget HTTP POST
  * with HMAC-SHA256 signature. Suitable for a handful of internal
  * subscribers (Scanner, SIEM). A future Prisma model `WebhookSubscription`
  * will replace the file store when we need RBAC and per-event filtering.
@@ -115,7 +115,7 @@ function sign(body: string, secret: string): string {
 /**
  * Publish an event to all matching subscribers. Fire-and-forget: callers
  * should not await this on the critical path. Failures are logged but
- * never thrown — a flaky subscriber must not break the trigger operation.
+ * never thrown - a flaky subscriber must not break the trigger operation.
  */
 export function publishEvent(event: WebhookEvent, data: Record<string, unknown>): void {
   const subs = listSubscriptions().filter((s) => s.active && s.events.includes(event));
@@ -140,7 +140,7 @@ export function publishEvent(event: WebhookEvent, data: Record<string, unknown>)
 
   for (const sub of subs) {
     const signature = sign(body, sub.secret);
-    // No await — let it run async
+    // No await - let it run async
     fetch(sub.url, {
       method: "POST",
       headers: {

@@ -10,7 +10,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY backend/prisma ./backend/prisma
 
-# Prefer reproducible install — falls back to install when lockfile absent
+# Prefer reproducible install - falls back to install when lockfile absent
 RUN if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
 # ─── Stage 2: Builder ────────────────────────────────────────────────────────

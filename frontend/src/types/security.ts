@@ -13,6 +13,14 @@ export interface CVERecord {
   lastModifiedDate: string | null;
   references: string | null;
   vulnStatus: string | null;
+  /** Remediation workflow status (NEW/ANALYZING/CONFIRMED/REMEDIATED/FALSE_POSITIVE/WONTFIX). */
+  cveStatus?: string;
+  /** DB row version, for optimistic-lock PATCH calls. Named to avoid colliding
+   * with the CVSS-vector-derived `version` label that normalizeCve() computes. */
+  dbVersion?: number;
+  /** Whether NVD lists a Patch/Vendor Advisory reference for this CVE. */
+  hasPatch?: boolean;
+  patchRefs?: { url: string; tags: string[] }[];
   importedAt: string;
   createdAt?: string;
   updatedAt?: string;

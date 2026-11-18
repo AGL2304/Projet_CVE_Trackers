@@ -5,7 +5,7 @@ import { applyRateLimit } from "@/lib/v2/rate-limit";
 import { jsonApiError, jsonApiResponse } from "@/lib/v2/jsonapi";
 
 /**
- * Lists the most recent report jobs — newest first.
+ * Lists the most recent report jobs - newest first.
  * Query params:
  *   - limit (default 20, max 100)
  *   - status (filter by ReportStatus)

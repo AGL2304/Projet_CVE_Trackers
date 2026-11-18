@@ -66,7 +66,7 @@ export interface SyncRunOptions {
   maxRecords?: number;
   /** Only fetch CVEs modified after this date (delta sync). */
   lastModStartDate?: Date;
-  /** Page size — NVD max is 2000. */
+  /** Page size - NVD max is 2000. */
   pageSize?: number;
   /** NVD API key for higher rate limits. */
   apiKey?: string;
@@ -305,7 +305,7 @@ export async function runNvdSync(options: SyncRunOptions = {}): Promise<SyncResu
       totalUpdated += result.updatedCount;
       totalErrors += result.errorCount;
       processed += result.processedCount;
-      // Keep logs bounded — store only summary + last errors
+      // Keep logs bounded - store only summary + last errors
       if (result.errorCount > 0) {
         allLogs.push(...result.logs.filter((l) => l.startsWith("ERROR")));
       }

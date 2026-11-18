@@ -8,7 +8,7 @@ import { getActor, hasRole } from "@/lib/v2/auth";
 import { writeAuditLog } from "@/lib/v2/audit";
 
 /**
- * Schema for the report filter — keep it permissive but typed so the worker
+ * Schema for the report filter - keep it permissive but typed so the worker
  * can apply it as a Prisma `where` clause without surprises.
  */
 const filterSchema = z
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data;
 
-    // Enqueue — the worker picks it up on its next tick (~15s).
+    // Enqueue - the worker picks it up on its next tick (~15s).
     // We do NOT compute KPIs inline anymore: report generation paginates the
     // entire matching set, which can take seconds on large filters and would
     // block the request handler.

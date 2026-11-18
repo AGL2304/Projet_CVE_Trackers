@@ -3,7 +3,7 @@
  * CPE → CVE matcher.
  *
  * The sync/cpe endpoint records Products (by CPE) and *reads* Product↔CVE links
- * (ProductCVE), but nothing ever *creates* those links — so the exposure counts
+ * (ProductCVE), but nothing ever *creates* those links - so the exposure counts
  * always came back 0. This script closes that gap.
  *
  * For every Product that carries a CPE it:
@@ -15,7 +15,7 @@
  *   3. upserts each returned CVE (same shape as the worker's NVD sync),
  *   4. creates the ProductCVE link (idempotent via the @@unique constraint).
  *
- * This is a MANUAL trigger — it does not touch the scheduled-sync pause marker,
+ * This is a MANUAL trigger - it does not touch the scheduled-sync pause marker,
  * so it runs even while auto-sync is paused. Run it from the worker container,
  * which already has the Prisma client and outbound access to NVD:
  *
@@ -39,7 +39,7 @@ const NVD_PAGE_SIZE = num(process.env.NVD_PAGE_SIZE, 200);
 const MAX_PER_PRODUCT = num(process.env.MATCH_MAX_PER_PRODUCT, 500);
 const DRY_RUN = process.argv.includes("--dry-run");
 
-// NVD vendor aliases — the scanner's fingerprint DB lags behind NVD's renames.
+// NVD vendor aliases - the scanner's fingerprint DB lags behind NVD's renames.
 const VENDOR_ALIASES = {
   redislabs: "redis",
 };
@@ -190,7 +190,7 @@ async function upsertCve(entry) {
 async function matchProduct(product, apiKey, rateDelay) {
   const match = buildMatch(product.cpe);
   if (!match) {
-    warn(`skip product ${product.id} — unusable CPE ${product.cpe}`);
+    warn(`skip product ${product.id} - unusable CPE ${product.cpe}`);
     return { cves: 0, linked: 0, severities: {} };
   }
 
@@ -277,7 +277,7 @@ async function main() {
   }
 
   log(
-    `done — ${totals.cves} CVE match(es) across products, ${totals.linked} new ProductCVE link(s). ` +
+    `done - ${totals.cves} CVE match(es) across products, ${totals.linked} new ProductCVE link(s). ` +
       `severities: ${JSON.stringify(totals.severities)}`
   );
 }

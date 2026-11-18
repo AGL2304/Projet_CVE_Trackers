@@ -16,7 +16,7 @@ interface AuditInput {
 // Pseudo-actor IDs that don't correspond to a real User row in DB.
 // These are produced by getActor() when the request comes from the admin
 // session cookie or no session at all. We must NOT pass them as a foreign
-// key — the AuditLog.userId column references User.id.
+// key - the AuditLog.userId column references User.id.
 const PSEUDO_ACTOR_IDS = new Set<string>(["admin-session", "system", "service"]);
 
 export async function writeAuditLog(input: AuditInput) {
@@ -27,7 +27,7 @@ export async function writeAuditLog(input: AuditInput) {
   const userId = rawId && !PSEUDO_ACTOR_IDS.has(rawId) ? rawId : null;
   const userAgent = input.request?.headers.get("user-agent") ?? null;
 
-  // Best-effort logging — never let a failed audit insert break the caller.
+  // Best-effort logging - never let a failed audit insert break the caller.
   // Foreign-key violations on unexpected actor IDs would otherwise 500 the
   // user's actual operation.
   try {

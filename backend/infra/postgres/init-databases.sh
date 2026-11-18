@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Postgres init script — runs once at container first-boot.
+# Postgres init script - runs once at container first-boot.
 #
 # Creates the two satellite databases used by Network Scanner Pro and SIEM
 # Léger, plus a dedicated user per app. CVE Tracker's database is already

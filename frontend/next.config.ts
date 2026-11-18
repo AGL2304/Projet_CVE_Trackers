@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
-    // CSP — start strict, then loosen only where the app genuinely needs it.
+    // CSP - start strict, then loosen only where the app genuinely needs it.
     // 'unsafe-inline' on style-src is unavoidable for Tailwind/Radix runtime styles;
     // 'unsafe-eval' on script-src is needed by Next dev refresh + Recharts in dev.
     const scriptSrc = isProd

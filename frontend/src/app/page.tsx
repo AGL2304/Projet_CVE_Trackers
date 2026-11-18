@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { scaleLinear } from "d3-scale";
 import { Activity, ArrowUpRight, CheckCircle2, ShieldAlert, Timer } from "lucide-react";
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell } from "recharts";
-import { useCVEs, useVulnerabilities } from "@/hooks/queries";
+import { useDashboardAnalytics, useRecentCves, useVulnerabilities } from "@/hooks/queries";
 import { normalizeCve, cveDate, cveRelativeDate } from "@/lib/cve-helpers";
 import { getSeverityColor, severityLabel } from "@/lib/cvss";
 import { useUiPreferencesStore } from "@/store/ui-preferences";
@@ -150,7 +150,7 @@ export default function DashboardPage() {
     isLoading: cvesLoading,
     isError: cvesError,
     refetch: refetchCves,
-  } = useCVEs();
+  } = useRecentCves(100);
 
   const {
     data: vulnerabilities,
@@ -158,6 +158,13 @@ export default function DashboardPage() {
     isError: vulnError,
     refetch: refetchVulnerabilities,
   } = useVulnerabilities();
+
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    isError: analyticsError,
+    refetch: refetchAnalytics,
+  } = useDashboardAnalytics();
 
   const [selectedSeverity, setSelectedSeverity] = React.useState<string>("all");
 
@@ -172,8 +179,9 @@ export default function DashboardPage() {
       ["none", 0],
     ]);
 
-    cves.forEach((cve) => {
-      map.set(cve.severity, (map.get(cve.severity) ?? 0) + 1);
+    (analytics?.vulnerabilitiesBySeverity ?? []).forEach((entry) => {
+      const key = entry.severity.toLowerCase();
+      if (map.has(key)) map.set(key, entry.value);
     });
 
     return Array.from(map.entries()).map(([severity, value]) => ({
@@ -182,7 +190,7 @@ export default function DashboardPage() {
       label: severityLabel(severity, locale),
       color: getSeverityColor(severity),
     }));
-  }, [cves, locale]);
+  }, [analytics, locale]);
 
   const topCritical = React.useMemo(() => {
     return cves
@@ -194,16 +202,11 @@ export default function DashboardPage() {
 
   const metrics = React.useMemo(() => {
     const now = new Date();
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(now.getDate() - 7);
-
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const critical = cves.filter((cve) => cve.severity === "critical").length;
-    const new7d = cves.filter((cve) => {
-      const published = cve.publishedDate ? new Date(cve.publishedDate) : new Date(cve.importedAt);
-      return published >= sevenDaysAgo;
-    }).length;
+    const critical =
+      analytics?.vulnerabilitiesBySeverity.find((entry) => entry.severity.toLowerCase() === "critical")
+        ?.value ?? 0;
 
     const patchedMonth = (vulnerabilities ?? []).filter((entry) => {
       if (entry.status !== "resolved") return false;
@@ -211,17 +214,14 @@ export default function DashboardPage() {
       return referenceDate >= firstDayOfMonth;
     }).length;
 
-    const cvss = cves.filter((cve) => typeof cve.cvssScore === "number").map((cve) => Number(cve.cvssScore));
-    const avgCvss = cvss.length ? cvss.reduce((sum, value) => sum + value, 0) / cvss.length : 0;
-
     return {
-      total: cves.length,
+      total: analytics?.totalCVEs ?? 0,
       critical,
-      new7d,
+      new7d: analytics?.newCVEs7d ?? 0,
       patchedMonth,
-      avgCvss: avgCvss.toFixed(1),
+      avgCvss: (analytics?.avgCvssV3 ?? 0).toFixed(1),
     };
-  }, [cves, vulnerabilities]);
+  }, [analytics, vulnerabilities]);
 
   const timeline = React.useMemo(() => {
     const cveTimeline = cves.slice(0, 18).map((item) => ({
@@ -254,8 +254,8 @@ export default function DashboardPage() {
       .slice(0, 8);
   }, [assignments]);
 
-  const isLoading = cvesLoading || vulnLoading;
-  const isError = cvesError || vulnError;
+  const isLoading = cvesLoading || vulnLoading || analyticsLoading;
+  const isError = cvesError || vulnError || analyticsError;
 
   if (isLoading) {
     return (
@@ -275,6 +275,7 @@ export default function DashboardPage() {
           onAction={() => {
             void refetchCves();
             void refetchVulnerabilities();
+            void refetchAnalytics();
           }}
         />
       </div>
@@ -617,7 +618,7 @@ function CveDensityHeatmap({
     return cols;
   }, [cells]);
 
-  // Month labels — render once per month transition, above the column where the change happens.
+  // Month labels - render once per month transition, above the column where the change happens.
   const monthLabels = React.useMemo(() => {
     const labels: Array<{ index: number; label: string }> = [];
     let lastMonth = -1;

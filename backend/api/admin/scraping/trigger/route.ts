@@ -10,7 +10,7 @@ const triggerSchema = z.object({
 });
 
 /**
- * Manually trigger a NVD scraping run. We don't fetch inline here — we
+ * Manually trigger a NVD scraping run. We don't fetch inline here - we
  * just enqueue a SyncJob row that the background worker will pick up on
  * its next tick. This keeps the request fast and avoids blocking the
  * Next.js process on slow NVD pagination.
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    // empty body is fine — defaults apply
+    // empty body is fine - defaults apply
   }
 
   const parsed = triggerSchema.safeParse(body);
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Reject if a sync is already running — prevents the user from queueing
+  // Reject if a sync is already running - prevents the user from queueing
   // a dogpile of full syncs that would just thrash NVD's rate limit.
   const inFlight = await db.syncJob.findFirst({
     where: { source: SyncSource.NVD, status: { in: [SyncJobStatus.RUNNING, SyncJobStatus.QUEUED] } },
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       jobId: job.id,
       mode: parsed.data.mode,
-      message: "Sync enqueued — the worker will pick it up within the poll interval.",
+      message: "Sync enqueued - the worker will pick it up within the poll interval.",
     },
     { status: 202 }
   );

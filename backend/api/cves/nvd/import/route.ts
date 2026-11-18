@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Publish a webhook event so subscribers (SIEM…) can react in real time.
-    // Fire-and-forget — never block the import on a slow subscriber.
+    // Fire-and-forget - never block the import on a slow subscriber.
     publishEvent('cve.created', {
       cveId: upserted.cveId,
       severity: upserted.severity,

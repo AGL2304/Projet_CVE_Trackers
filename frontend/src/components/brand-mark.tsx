@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 
 /**
- * CVE Tracker brand mark — the "severity gauge" dial.
+ * CVE Tracker brand mark - the "severity gauge" dial.
  *
  * Self-contained colours from the charte graphique: a navy ring (#1E2A40)
  * with four severity arcs (low #3DDC84 → medium #FFD166 → high #FB8B24 →

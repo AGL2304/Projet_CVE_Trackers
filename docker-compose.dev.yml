@@ -147,7 +147,7 @@ services:
     environment:
       - SCANNER_ENVIRONMENT=development
       - SCANNER_LOG_LEVEL=INFO
-      # Real engine only — never inject synthetic demo hosts. From inside this
+      # Real engine only - never inject synthetic demo hosts. From inside this
       # container the LAN is unreachable, so a scan returns 0 hosts (empty)
       # rather than fake data; run scripts/real_scan.py host-side for real LAN
       # discovery. Set to 'fake' only for offline tests.
@@ -167,13 +167,13 @@ services:
       - SCANNER_SCHEDULE_PROFILE=quick
       - SCANNER_SCHEDULE_INTERVAL_MINUTES=360
       - SCANNER_SCHEDULE_INITIAL_DELAY_SECONDS=30
-      # No API token in dev — auth is bypassed when SCANNER_API_TOKEN is unset
+      # No API token in dev - auth is bypassed when SCANNER_API_TOKEN is unset
       - SCANNER_DB_URL=postgresql+asyncpg://scanner:scanner@postgres:5432/network_scanner
       - SCANNER_REDIS_URL=redis://redis:6379/2
       - SCANNER_CVE_TRACKER_URL=http://app:3000
       # Shared secret allows scanner -> CVE Tracker calls without admin cookie
       - SCANNER_CVE_TRACKER_SHARED_SECRET=dev-shared-secret-replace-in-prod
-      # Allowlist permissive en dev — couvre les RFC1918 et la loopback
+      # Allowlist permissive en dev - couvre les RFC1918 et la loopback
       - SCANNER_ALLOWLIST_CIDRS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8
     extra_hosts:
       # Make host.docker.internal resolve to the host on all platforms.
@@ -204,6 +204,10 @@ services:
       - SIEM_CVE_TRACKER_SHARED_SECRET=dev-shared-secret-replace-in-prod
       - SIEM_RULES_DIR=/app/rules/preloaded
       - SIEM_RULE_EVAL_INTERVAL_S=15
+      # Cold Next.js enrichment routes can exceed the 2s default on the very
+      # first hit after a restart (observed ReadTimeout on real 0011 detection);
+      # 5s absorbs that cold start so the first alert still attaches its CVEs.
+      - SIEM_ENRICHMENT_TIMEOUT_MS=5000
     depends_on:
       postgres:
         condition: service_healthy

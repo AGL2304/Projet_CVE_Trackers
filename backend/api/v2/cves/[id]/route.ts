@@ -24,6 +24,9 @@ const patchSchema = z.object({
   references: z.string().optional().nullable(),
   vulnStatus: z.string().optional().nullable(),
   rawData: z.unknown().optional(),
+  // Free-text description of the remediation process (what was done, which
+  // version/patch was applied, ...). Surfaced later via ?include=history.
+  note: z.string().trim().min(3).max(2000).optional(),
 });
 
 export async function GET(
@@ -145,6 +148,32 @@ export async function GET(
             description: link.tag.description,
           },
         }))
+      );
+    }
+
+    if (includes.includes("history")) {
+      const logs = await db.auditLog.findMany({
+        where: { resource: "cve", resourceId: cve.id },
+        orderBy: { timestamp: "desc" },
+        include: { user: { select: { email: true } } },
+      });
+      included.push(
+        ...logs.map((log) => {
+          const after = (log.after ?? {}) as { status?: string; note?: string; actorEmail?: string };
+          const before = (log.before ?? {}) as { status?: string };
+          return {
+            type: "audit-logs",
+            id: log.id,
+            attributes: {
+              action: log.action,
+              fromStatus: before.status ?? null,
+              toStatus: after.status ?? null,
+              note: after.note ?? null,
+              actorEmail: log.user?.email ?? after.actorEmail ?? null,
+              timestamp: log.timestamp,
+            },
+          };
+        })
       );
     }
 
@@ -290,6 +319,8 @@ export async function PATCH(
         version: updated.version,
         status: updated.status,
         severity: updated.severity,
+        ...(patch.note ? { note: patch.note } : {}),
+        actorEmail: actor.email,
       },
       request,
     });

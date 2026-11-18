@@ -792,7 +792,7 @@ export default function AssetsPage() {
                         <TableCell className="text-xs">
                           {asset.ip && <div className="font-mono">{asset.ip}</div>}
                           {asset.hostname && <div className="text-muted-foreground">{asset.hostname}</div>}
-                          {!asset.ip && !asset.hostname && <span className="text-muted-foreground">—</span>}
+                          {!asset.ip && !asset.hostname && <span className="text-muted-foreground">-</span>}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={criticalityColor(asset.criticality)}>
@@ -934,7 +934,7 @@ function ProductBadges({
 }) {
   const items = links ?? [];
   if (items.length === 0) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    return <span className="text-xs text-muted-foreground">-</span>;
   }
   const shown = items.slice(0, 3);
   const remaining = total - shown.length;

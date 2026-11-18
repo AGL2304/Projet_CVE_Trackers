@@ -58,7 +58,7 @@ export async function GET(
       );
     }
 
-    // Guard against path traversal — only allow files inside REPORTS_DIR.
+    // Guard against path traversal - only allow files inside REPORTS_DIR.
     const absolute = path.resolve(report.storagePath);
     const rootResolved = path.resolve(REPORTS_DIR);
     if (!absolute.startsWith(rootResolved + path.sep) && absolute !== rootResolved) {
@@ -110,7 +110,7 @@ export async function GET(
       ? `inline; filename="${filename}"`
       : `attachment; filename="${filename}"`;
 
-    // Stream rather than buffer — reports can reach tens of MB.
+    // Stream rather than buffer - reports can reach tens of MB.
     const nodeStream = createReadStream(resolved);
     const webStream = nodeToWebStream(nodeStream);
 

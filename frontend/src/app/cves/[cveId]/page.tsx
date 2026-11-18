@@ -14,9 +14,11 @@ import {
   PolarRadiusAxis,
   ResponsiveContainer,
 } from "recharts";
-import { ExternalLink, MessageSquare, ShieldCheck, Wrench } from "lucide-react";
-import { useCVEs } from "@/hooks/queries";
+import { CheckCircle2, ExternalLink, History, MessageSquare, ShieldCheck, Wrench } from "lucide-react";
+import { useCveByCveId, useCveHistory } from "@/hooks/queries";
 import { normalizeCve, parseReferences, cveDate, cveRelativeDate } from "@/lib/cve-helpers";
+import { fetchJson } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 import { SeverityBadge } from "@/components/severity-badge";
 import { EmptyState } from "@/components/states/empty-state";
 import { LoadingGrid } from "@/components/states/loading-grid";
@@ -24,6 +26,14 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -106,6 +116,28 @@ const copy = {
     nvdStatus: "Statut NVD",
     published: "Publication",
     updated: "Derniere mise a jour",
+    fixStatusTitle: "Statut de correction",
+    fixStatusDesc: "Correctif editeur disponible et suivi de remediation",
+    remediated: "Corrigee",
+    patchAvailable: "Patch disponible",
+    noPatchFound: "Aucun correctif identifie",
+    markRemediated: "Marquer comme corrigee",
+    markRemediatedDone: "CVE marquee comme corrigee",
+    markRemediatedError: "Impossible de mettre a jour le statut",
+    patchLinksTitle: "Liens de correctif (NVD)",
+    patchLinksDesc: "Patch / Vendor Advisory remontes par la NVD pour cette CVE",
+    markRemediatedDialogTitle: "Marquer cette CVE comme corrigee",
+    markRemediatedDialogDesc: "Decrivez le processus de correction suivi (version appliquee, date de deploiement, workaround...). Ce texte reste visible dans l'historique de la CVE.",
+    remediationNoteLabel: "Processus de correction",
+    remediationNotePlaceholder: "Ex: Patch vendor applique le 14/11 sur tous les hotes exposes, valide par scan post-patch le 15/11.",
+    confirm: "Confirmer",
+    cancel: "Annuler",
+    processTitle: "Processus de correction",
+    processDesc: "Historique des changements de statut et notes de remediation",
+    noProcessHistory: "Aucun historique",
+    noProcessHistoryDesc: "Aucun changement de statut enregistre pour cette CVE.",
+    statusChange: "Statut",
+    by: "par",
   },
   en: {
     loadErrorTitle: "CVE error",
@@ -160,6 +192,28 @@ const copy = {
     nvdStatus: "NVD status",
     published: "Publication",
     updated: "Last update",
+    fixStatusTitle: "Fix status",
+    fixStatusDesc: "Vendor patch availability and remediation tracking",
+    remediated: "Remediated",
+    patchAvailable: "Patch available",
+    noPatchFound: "No fix identified",
+    markRemediated: "Mark as remediated",
+    markRemediatedDone: "CVE marked as remediated",
+    markRemediatedError: "Unable to update status",
+    patchLinksTitle: "Patch links (NVD)",
+    patchLinksDesc: "Patch / Vendor Advisory references reported by NVD for this CVE",
+    markRemediatedDialogTitle: "Mark this CVE as remediated",
+    markRemediatedDialogDesc: "Describe the remediation process followed (version applied, deployment date, workaround...). This text stays visible in the CVE's history.",
+    remediationNoteLabel: "Remediation process",
+    remediationNotePlaceholder: "E.g.: Vendor patch applied 11/14 on all exposed hosts, validated by post-patch scan on 11/15.",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    processTitle: "Remediation process",
+    processDesc: "History of status changes and remediation notes",
+    noProcessHistory: "No history",
+    noProcessHistoryDesc: "No status change recorded for this CVE.",
+    statusChange: "Status",
+    by: "by",
   },
 } as const;
 
@@ -167,12 +221,12 @@ export default function CveDetailPage() {
   const params = useParams<{ cveId: string }>();
   const locale = useUiPreferencesStore((state) => state.locale);
   const t = copy[locale];
-  const { data, isLoading, isError, refetch } = useCVEs();
+  const { data, isLoading, isError, refetch } = useCveByCveId(params.cveId);
+  const { data: remediationHistory, refetch: refetchRemediationHistory } = useCveHistory(params.cveId);
 
   const cve = React.useMemo(() => {
-    const target = params.cveId;
-    return (data ?? []).map(normalizeCve).find((item) => item.cveId === target);
-  }, [data, params.cveId]);
+    return data ? normalizeCve(data) : undefined;
+  }, [data]);
 
   const [vector, setVector] = React.useState({
     attack: 8,
@@ -183,6 +237,9 @@ export default function CveDetailPage() {
   });
 
   const [comments, setComments] = React.useState<InternalComment[]>([]);
+  const [markingRemediated, setMarkingRemediated] = React.useState(false);
+  const [remediationDialogOpen, setRemediationDialogOpen] = React.useState(false);
+  const [remediationNote, setRemediationNote] = React.useState("");
 
   const form = useForm<CommentValues>({
     resolver: zodResolver(commentSchema),
@@ -263,6 +320,28 @@ export default function CveDetailPage() {
     );
   }
 
+  const isRemediated = cve.cveStatus === "REMEDIATED";
+  const patchLinks = cve.patchRefs ?? [];
+
+  const markRemediated = async (note: string) => {
+    setMarkingRemediated(true);
+    try {
+      await fetchJson(`/api/v2/cves/${cve.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ version: cve.dbVersion, status: "REMEDIATED", note }),
+      });
+      toast({ title: t.markRemediatedDone, description: cve.cveId });
+      setRemediationDialogOpen(false);
+      setRemediationNote("");
+      await Promise.all([refetch(), refetchRemediationHistory()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      toast({ title: t.markRemediatedError, description: message, variant: "destructive" });
+    } finally {
+      setMarkingRemediated(false);
+    }
+  };
+
   const references = parseReferences(cve.references);
   const products = [
     {
@@ -285,7 +364,20 @@ export default function CveDetailPage() {
       <PageHeader
         title={cve.cveId}
         description={t.titleDesc}
-        actions={<SeverityBadge value={cve.severity} />}
+        actions={
+          <>
+            <SeverityBadge value={cve.severity} />
+            {isRemediated ? (
+              <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">
+                <CheckCircle2 className="mr-1 h-3 w-3" /> {t.remediated}
+              </Badge>
+            ) : patchLinks.length > 0 ? (
+              <Badge className="bg-sky-500/15 text-sky-700 border-sky-500/30">{t.patchAvailable}</Badge>
+            ) : (
+              <Badge variant="outline">{t.noPatchFound}</Badge>
+            )}
+          </>
+        }
       />
 
       <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
@@ -487,12 +579,92 @@ export default function CveDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="remediation">
+        <TabsContent value="remediation" className="space-y-4">
           <Card className="card-elevated">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Wrench className="h-4 w-4" /> {t.remediationTitle}
+                <Wrench className="h-4 w-4" /> {t.fixStatusTitle}
               </CardTitle>
+              <CardDescription>{t.fixStatusDesc}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {isRemediated ? (
+                  <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">
+                    <CheckCircle2 className="mr-1 h-3 w-3" /> {t.remediated}
+                  </Badge>
+                ) : patchLinks.length > 0 ? (
+                  <Badge className="bg-sky-500/15 text-sky-700 border-sky-500/30">{t.patchAvailable}</Badge>
+                ) : (
+                  <Badge variant="outline">{t.noPatchFound}</Badge>
+                )}
+                {!isRemediated && (
+                  <Button size="sm" onClick={() => setRemediationDialogOpen(true)} disabled={markingRemediated}>
+                    <CheckCircle2 className="mr-2 h-4 w-4" /> {t.markRemediated}
+                  </Button>
+                )}
+              </div>
+
+              {patchLinks.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{t.patchLinksTitle}</p>
+                  <p className="text-xs text-muted-foreground">{t.patchLinksDesc}</p>
+                  {patchLinks.map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-muted"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <span className="truncate">{link.url}</span>
+                        {link.tags.map((tag) => (
+                          <Badge key={tag} variant="outline" className="shrink-0 text-[10px]">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </span>
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-4 w-4" /> {t.processTitle}
+              </CardTitle>
+              <CardDescription>{t.processDesc}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {!remediationHistory || remediationHistory.length === 0 ? (
+                <EmptyState title={t.noProcessHistory} description={t.noProcessHistoryDesc} />
+              ) : (
+                remediationHistory.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">
+                        {t.statusChange}: {entry.fromStatus ?? "?"} → {entry.toStatus ?? "?"}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {cveRelativeDate(entry.timestamp, locale)}
+                        {entry.actorEmail ? ` · ${t.by} ${entry.actorEmail}` : ""}
+                      </span>
+                    </div>
+                    {entry.note && <p className="mt-1 text-sm text-muted-foreground">{entry.note}</p>}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle>{t.remediationTitle}</CardTitle>
               <CardDescription>{t.remediationDesc}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -517,6 +689,35 @@ export default function CveDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={remediationDialogOpen} onOpenChange={setRemediationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.markRemediatedDialogTitle}</DialogTitle>
+            <DialogDescription>{t.markRemediatedDialogDesc}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>{t.remediationNoteLabel}</Label>
+            <Textarea
+              value={remediationNote}
+              onChange={(event) => setRemediationNote(event.target.value)}
+              rows={4}
+              placeholder={t.remediationNotePlaceholder}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemediationDialogOpen(false)}>
+              {t.cancel}
+            </Button>
+            <Button
+              onClick={() => void markRemediated(remediationNote)}
+              disabled={markingRemediated || remediationNote.trim().length < 3}
+            >
+              {t.confirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
